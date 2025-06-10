@@ -3,207 +3,166 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin - Misiones Casas</title>
-
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw/dist/leaflet.draw.css" />
+  <title>Visitas Casas - Admin</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet/dist/leaflet.css"
+  />
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.css"
+  />
   <style>
-    html, body, #map {
-      height: 100%;
-      margin: 0;
-      padding: 0;
+    #map { height: 80vh; width: 100%; margin-bottom: 1rem; }
+    #usuarios, #asignar-container {
+      margin-bottom: 1rem;
     }
-    #controles {
-      padding: 10px;
-      background: #f0f0f0;
-    }
-    button {
-      margin-right: 10px;
-      margin-top: 5px;
-      padding: 5px 10px;
-      cursor: pointer;
-    }
-    input {
-      padding: 5px;
-      width: 200px;
+    .estado-buttons button {
+      margin: 0 5px 5px 0;
     }
   </style>
 </head>
 <body>
-  <div id="controles">
-    <input type="text" id="usuarioAsignar" placeholder="Nombre usuario para asignar" />
-    <button id="btnAsignar">Asignar casas seleccionadas</button>
-    <button id="btnDesasignar">Desasignar casas seleccionadas</button>
-  </div>
+  <h2>Panel de Administración</h2>
+  <label>Asignar casas a usuario:</label>
+  <input type="text" id="usuarioAsignar" placeholder="Nombre usuario" />
+  <button id="btnAsignar">Asignar casas seleccionadas</button>
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="https://unpkg.com/leaflet-draw/dist/leaflet.draw.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
   <script src="/socket.io/socket.io.js"></script>
-
   <script>
     const socket = io();
+    let map;
+    let markers = [];
+    let selectedMarkers = new Set();
 
-    const map = L.map('map').setView([-31.4265, -64.4572], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
+    const estadoColores = {
+      'visitada': 'green',
+      'no atendieron': 'red',
+      'otro': 'yellow'
+    };
 
-    let casas = [];
-    const markers = new Map();
-    const seleccionados = new Set();
-
-    function getColor(casa) {
-      if (seleccionados.has(casa.id)) return 'orange'; // seleccionado
-      if (!casa.asignado_a) return 'gray'; // sin asignar
-      switch (casa.estado) {
-        case 'visitada': return 'green';
-        case 'no atendieron': return 'red';
-        case 'otro': return 'yellow';
-        default: return 'blue';
-      }
+    function getColorForEstado(estado) {
+      return estadoColores[estado] || 'gray';
     }
 
     function clearMarkers() {
       markers.forEach(m => map.removeLayer(m));
-      markers.clear();
-      seleccionados.clear();
+      markers = [];
+      selectedMarkers.clear();
     }
 
-    function pintarCasas() {
-      markers.forEach(m => map.removeLayer(m));
-      markers.clear();
-      casas.forEach(casa => {
-        const color = getColor(casa);
-        const marker = L.circleMarker([casa.latitud, casa.longitud], {
-          radius: 8,
-          color,
+    function pintarMarker(marker, casa) {
+      let color = getColorForEstado(casa.estado);
+      if (casa.asignado_a) {
+        // Si está asignada, pintamos borde negro y fondo un poco más oscuro
+        marker.setStyle({
+          color: 'black',
+          fillColor: color,
+          fillOpacity: 0.9,
+          radius: 9,
+        });
+      } else {
+        marker.setStyle({
+          color: color,
           fillColor: color,
           fillOpacity: 0.8,
-          weight: 2,
-          opacity: 1
-        }).addTo(map);
-
-        marker.on('click', () => {
-          if (seleccionados.has(casa.id)) {
-            seleccionados.delete(casa.id);
-          } else {
-            seleccionados.add(casa.id);
-          }
-          pintarCasas();
+          radius: 8,
         });
+      }
+    }
 
-        marker.bindPopup(`
-          <b>${casa.direccion}</b><br/>
-          Estado: ${casa.estado || 'sin estado'}<br/>
-          Asignado a: ${casa.asignado_a || 'Nadie'}<br/>
-          Comentario: ${casa.comentario || '(vacío)'}
-        `);
+    function addMarker(casa) {
+      const color = getColorForEstado(casa.estado);
+      const marker = L.circleMarker([casa.latitud, casa.longitud], {
+        radius: 8,
+        color,
+        fillColor: color,
+        fillOpacity: 0.8,
+      }).addTo(map);
 
-        markers.set(casa.id, marker);
+      pintarMarker(marker, casa);
+
+      marker.casaId = casa.id;
+
+      marker.on('click', () => {
+        if (selectedMarkers.has(marker)) {
+          selectedMarkers.delete(marker);
+          pintarMarker(marker, casa);
+        } else {
+          selectedMarkers.add(marker);
+          marker.setStyle({
+            color: 'blue',
+            fillColor: 'blue',
+            fillOpacity: 1,
+            radius: 10,
+          });
+        }
       });
+
+      marker.bindPopup(`
+        <b>${casa.direccion}</b><br/>
+        Estado: ${casa.estado || 'sin estado'}<br/>
+        Asignado a: ${casa.asignado_a || 'Nadie'}<br/>
+        <div class="estado-buttons">
+          <button onclick="cambiarEstado(${casa.id}, 'visitada')">Visitada</button>
+          <button onclick="cambiarEstado(${casa.id}, 'no atendieron')">No atendieron</button>
+          <button onclick="cambiarEstado(${casa.id}, 'otro')">Otro</button>
+        </div>
+      `);
+
+      markers.push(marker);
     }
 
     async function cargarCasas() {
-      try {
-        const res = await fetch('/casas');
-        casas = await res.json();
-        pintarCasas();
-      } catch {
-        alert('Error cargando casas');
-      }
+      clearMarkers();
+      const res = await fetch('/casas'); // devuelve TODAS las casas
+      const casas = await res.json();
+      casas.forEach(addMarker);
     }
 
-    const drawnItems = new L.FeatureGroup();
-    map.addLayer(drawnItems);
-
-    const drawControl = new L.Control.Draw({
-      draw: {
-        polygon: false,
-        polyline: false,
-        circle: false,
-        circlemarker: false,
-        marker: false,
-        rectangle: true
-      },
-      edit: false,
-    });
-    map.addControl(drawControl);
-
-    map.on(L.Draw.Event.CREATED, e => {
-      drawnItems.clearLayers();
-      seleccionados.clear();
-
-      const layer = e.layer;
-      drawnItems.addLayer(layer);
-
-      const bounds = layer.getBounds();
-
-      casas.forEach(casa => {
-        if (bounds.contains([casa.latitud, casa.longitud])) {
-          seleccionados.add(casa.id);
-        }
+    async function cambiarEstado(id, estado) {
+      await fetch('/estado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, estado }),
       });
-      pintarCasas();
-    });
+      cargarCasas();
+    }
 
-    document.getElementById('btnAsignar').addEventListener('click', async () => {
+    async function asignarCasas() {
       const usuario = document.getElementById('usuarioAsignar').value.trim();
       if (!usuario) {
-        alert('Ingresá un nombre de usuario');
+        alert('Ingresá un nombre de usuario para asignar');
         return;
       }
-      if (seleccionados.size === 0) {
-        alert('No hay casas seleccionadas');
+      if (selectedMarkers.size === 0) {
+        alert('Seleccioná al menos una casa para asignar');
         return;
       }
-      try {
-        const res = await fetch('/asignar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids: Array.from(seleccionados), usuario })
-        });
-        if (res.ok) {
-          alert('Casas asignadas');
-          seleccionados.clear();
-          drawnItems.clearLayers();
-          cargarCasas();
-        } else {
-          alert('Error asignando casas');
-        }
-      } catch {
-        alert('Error asignando casas');
-      }
+      const ids = Array.from(selectedMarkers).map(m => m.casaId);
+      await fetch('/asignar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, usuario }),
+      });
+      selectedMarkers.clear();
+      cargarCasas();
+    }
+
+    document.getElementById('btnAsignar').addEventListener('click', asignarCasas);
+
+    socket.on('actualizacion', () => {
+      cargarCasas();
     });
 
-    document.getElementById('btnDesasignar').addEventListener('click', async () => {
-      if (seleccionados.size === 0) {
-        alert('No hay casas seleccionadas para desasignar');
-        return;
-      }
-      if (!confirm('¿Desasignar casas seleccionadas? Se borrarán estado y comentario.')) {
-        return;
-      }
-      try {
-        const res = await fetch('/desasignar', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids: Array.from(seleccionados) })
-        });
-        if (res.ok) {
-          alert('Casas desasignadas');
-          seleccionados.clear();
-          drawnItems.clearLayers();
-          cargarCasas();
-        } else {
-          alert('Error desasignando casas');
-        }
-      } catch {
-        alert('Error desasignando casas');
-      }
-    });
-
-    socket.on('actualizacion', cargarCasas);
+    // Inicializar mapa centrado en Cosquín
+    map = L.map('map').setView([-31.4413, -64.5144], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
 
     cargarCasas();
   </script>
