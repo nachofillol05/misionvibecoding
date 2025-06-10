@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin - Asignar Casas</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 1rem; }
+    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    #usuarioAsignar { width: 200px; }
+    #btnAsignar { margin-left: 10px; }
+  </style>
+</head>
+<body>
+  <h2>Panel de Administración - Asignar Casas</h2>
+  <label>Nombre del usuario a asignar:</label>
+  <input type="text" id="usuarioAsignar" placeholder="Nombre usuario" />
+  <button id="btnAsignar">Asignar Casas Seleccionadas</button>
+
+  <table id="tablaCasas">
+    <thead>
+      <tr>
+        <th><input type="checkbox" id="checkTodos" /></th>
+        <th>ID</th>
+        <th>Dirección</th>
+        <th>Estado</th>
+        <th>Asignado a</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <script>
+    async function cargarCasas() {
+      const res = await fetch('/casas');
+      const casas = await res.json();
+      const tbody = document.querySelector('#tablaCasas tbody');
+      tbody.innerHTML = '';
+      casas.forEach(casa => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><input type="checkbox" class="checkCasa" value="${casa.id}" /></td>
+          <td>${casa.id}</td>
+          <td>${casa.direccion}</td>
+          <td>${casa.estado || ''}</td>
+          <td>${casa.asignado_a || ''}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('checkTodos').addEventListener('change', function() {
+      const checked = this.checked;
+      document.querySelectorAll('.checkCasa').forEach(chk => chk.checked = checked);
+    });
+
+    document.getElementById('btnAsignar').addEventListener('click', async () => {
+      const usuario = document.getElementById('usuarioAsignar').value.trim();
+      if (!usuario) return alert('Ingresá un nombre de usuario');
+
+      const checkboxes = document.querySelectorAll('.checkCasa:checked');
+      if (!checkboxes.length) return alert('Seleccioná al menos una casa');
+
+      const casaIds = Array.from(checkboxes).map(chk => parseInt(chk.value));
+
+      const res = await fetch('/asignar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ casaIds, usuario }),
+      });
+
+      if (res.ok) {
+        alert('Casas asignadas correctamente');
+        cargarCasas();
+      } else {
+        alert('Error al asignar casas');
+      }
+    });
+
+    cargarCasas();
+  </script>
+</body>
+</html>

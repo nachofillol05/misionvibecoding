@@ -1,14 +1,15 @@
 {
-  "name": "mision-casas",
+  "name": "misiones-casas",
   "version": "1.0.0",
+  "description": "App para coordinar visitas a casas",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "dotenv": "^16.0.0",
-    "express": "^4.18.0",
-    "pg": "^8.7.1",
-    "socket.io": "^4.4.0"
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "pg": "^8.11.0",
+    "socket.io": "^4.7.2"
   }
 }

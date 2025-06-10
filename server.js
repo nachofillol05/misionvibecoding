@@ -1,37 +1,79 @@
 const express = require('express');
 const http = require('http');
+const cors = require('cors');
 const { Server } = require('socket.io');
-const db = require('./db');
-require('dotenv').config();
+const pool = require('./db');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, { cors: { origin: "*" } });
 
-app.use(express.static('public'));
+app.use(cors());
 app.use(express.json());
+app.use(express.static('public'));
 
+// Obtener casas asignadas a un usuario
+app.get('/casas/:usuario', async (req, res) => {
+  const usuario = req.params.usuario;
+  try {
+    const result = await pool.query('SELECT * FROM casas WHERE asignado_a = $1 ORDER BY id', [usuario]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error en la consulta');
+  }
+});
+
+// Obtener todas las casas (para admin)
 app.get('/casas', async (req, res) => {
-  const result = await db.query('SELECT * FROM casas');
-  res.json(result.rows);
+  try {
+    const result = await pool.query('SELECT * FROM casas ORDER BY id');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error en la consulta');
+  }
 });
 
-app.post('/casas/:id/estado', async (req, res) => {
-  const { id } = req.params;
-  const { estado, comentario, actualizado_por } = req.body;
-  const result = await db.query(
-    `UPDATE casas SET estado=$1, comentario=$2, actualizado_por=$3, updated_at=NOW()
-     WHERE id=$4 RETURNING *`,
-    [estado, comentario, actualizado_por, id]
-  );
-  const actualizada = result.rows[0];
-  io.emit('casaActualizada', actualizada);
-  res.json(actualizada);
+// Asignar casas a un usuario (admin)
+app.post('/asignar', async (req, res) => {
+  const { casaIds, usuario } = req.body;
+  try {
+    await pool.query(
+      `UPDATE casas SET asignado_a = $1 WHERE id = ANY($2::int[])`,
+      [usuario, casaIds]
+    );
+    io.emit('actualizacion'); // Avisar a todos los clientes que hubo cambio
+    res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error al asignar casas');
+  }
 });
 
-io.on('connection', socket => {
-  console.log('cliente conectado');
+// Actualizar estado de una casa (visitada, no atendieron, otro)
+app.post('/estado', async (req, res) => {
+  const { id, estado } = req.body;
+  try {
+    await pool.query(
+      `UPDATE casas SET estado = $1 WHERE id = $2`,
+      [estado, id]
+    );
+    io.emit('actualizacion'); // Avisar a todos
+    res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error al actualizar estado');
+  }
 });
 
+// WebSockets para updates en tiempo real
+io.on('connection', (socket) => {
+  console.log('Cliente conectado');
+});
+
+// Iniciar servidor
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Servidor en puerto ${PORT}`));
+server.listen(PORT, () => {
+  console.log(`Servidor escuchando en puerto ${PORT}`);
+});

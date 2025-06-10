@@ -1,79 +1,114 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Misión Casas</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Visitas Casas - Usuario</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet/dist/leaflet.css"
+  />
   <style>
-    #map { height: 600px; }
-    .popup select, .popup input { width: 100%; margin-top: 5px; }
+    #map { height: 80vh; width: 100%; margin-bottom: 1rem; }
+    #login { margin: 1rem; }
+    .estado-buttons button {
+      margin: 0 5px;
+    }
   </style>
 </head>
 <body>
-  <h2>Misión Casas</h2>
-  <div>Usuario: <input id="usuario" placeholder="Tu nombre"><button onclick="iniciar()">Iniciar</button></div>
+  <h2>Ingrese su nombre para cargar sus casas asignadas</h2>
+  <div id="login">
+    <input type="text" id="usuario" placeholder="Tu nombre" />
+    <button id="btnCargar">Cargar Casas</button>
+  </div>
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const map = L.map('map').setView([-34.61, -58.38], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
     const socket = io();
-    let usuario = '';
-    let marcadores = {};
 
-    function iniciar() {
-      usuario = document.getElementById('usuario').value || 'Anonimo';
-      cargarCasas();
-    }
+    let map;
+    let markers = [];
 
-    async function cargarCasas() {
-      const res = await fetch('/casas');
-      const casas = await res.json();
-      casas.forEach(casa => agregarMarcador(casa));
-    }
-
-    function agregarMarcador(casa) {
-      const marker = L.marker([casa.latitud, casa.longitud], { casaId: casa.id }).addTo(map);
-      marker.bindPopup(generarPopup(casa));
-      marcadores[casa.id] = marker;
-    }
-
-    function generarPopup(casa) {
-      return `
-        <div class="popup">
-          <strong>${casa.direccion}</strong><br>
-          Estado:
-          <select id="estado-${casa.id}">
-            <option ${casa.estado==='visitada'?'selected':''}>visitada</option>
-            <option ${casa.estado==='no atendieron'?'selected':''}>no atendieron</option>
-            <option ${casa.estado==='otro'?'selected':''}>otro</option>
-          </select><br>
-          Comentario: <input id="comentario-${casa.id}" value="${casa.comentario || ''}">
-          <button onclick="guardarEstado(${casa.id})">Guardar</button>
-          <small>Último: ${casa.actualizado_por || '-'} - ${new Date(casa.updated_at).toLocaleString()}</small>
-        </div>
-      `;
-    }
-
-    async function guardarEstado(id) {
-      const estado = document.getElementById(`estado-${id}`).value;
-      const comentario = document.getElementById(`comentario-${id}`).value;
-      const res = await fetch(`/casas/${id}/estado`, {
-        method: 'POST',
-        headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ estado, comentario, actualizado_por: usuario })
-      });
-      const actualizada = await res.json();
-      marcadores[id].setPopupContent(generarPopup(actualizada));
-    }
-
-    socket.on('casaActualizada', casa => {
-      if (marcadores[casa.id]) {
-        marcadores[casa.id].setPopupContent(generarPopup(casa));
+    function getColorForEstado(estado) {
+      switch (estado) {
+        case 'visitada': return 'green';
+        case 'no atendieron': return 'red';
+        case 'otro': return 'yellow';
+        default: return 'blue';
       }
+    }
+
+    function clearMarkers() {
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+    }
+
+    function addMarker(casa) {
+      const color = getColorForEstado(casa.estado);
+      const marker = L.circleMarker([casa.latitud, casa.longitud], {
+        radius: 8,
+        color,
+        fillColor: color,
+        fillOpacity: 0.8,
+      }).addTo(map);
+
+      marker.bindPopup(`
+        <b>${casa.direccion}</b><br/>
+        Estado: ${casa.estado || 'sin estado'}<br/>
+        <div class="estado-buttons">
+          <button onclick="cambiarEstado(${casa.id}, 'visitada')">Visitada</button>
+          <button onclick="cambiarEstado(${casa.id}, 'no atendieron')">No atendieron</button>
+          <button onclick="cambiarEstado(${casa.id}, 'otro')">Otro</button>
+        </div>
+      `);
+
+      markers.push(marker);
+    }
+
+    async function cargarCasas(usuario) {
+      if (!usuario) return alert('Ingresá tu nombre');
+      clearMarkers();
+
+      const res = await fetch(`/casas/${usuario}`);
+      const casas = await res.json();
+
+      if (!casas.length) alert('No hay casas asignadas para este usuario');
+
+      casas.forEach(addMarker);
+
+      // Centrar mapa en la primera casa
+      if (casas.length) {
+        map.setView([casas[0].latitud, casas[0].longitud], 14);
+      }
+    }
+
+    async function cambiarEstado(id, estado) {
+      await fetch('/estado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, estado }),
+      });
+      cargarCasas(document.getElementById('usuario').value);
+    }
+
+    document.getElementById('btnCargar').addEventListener('click', () => {
+      const usuario = document.getElementById('usuario').value.trim();
+      cargarCasas(usuario);
     });
+
+    socket.on('actualizacion', () => {
+      const usuario = document.getElementById('usuario').value.trim();
+      if (usuario) cargarCasas(usuario);
+    });
+
+    // Inicializar mapa
+    map = L.map('map').setView([-31.2475, -64.4658], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
   </script>
 </body>
 </html>
