@@ -3,17 +3,22 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Visitas Casas - Usuario</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <title>Usuario - Misiones Casas</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet/dist/leaflet.css"
+  />
   <style>
     #map { height: 80vh; width: 100%; margin-bottom: 1rem; }
     #login { margin: 1rem; }
     .estado-buttons button {
-      margin: 0 5px 5px 0;
+      margin: 0 5px;
     }
     textarea {
       width: 100%;
-      resize: vertical;
+      height: 50px;
+      resize: none;
     }
   </style>
 </head>
@@ -29,40 +34,23 @@
   <script src="/socket.io/socket.io.js"></script>
   <script>
     const socket = io();
-    let map;
-    let markers = [];
-    let usuarioActual = null;
 
-    const estadoColores = {
-      'visitada': 'green',
-      'no atendieron': 'red',
-      'otro': 'yellow'
-    };
+    let map;
+    let markers = new Map();
+    let currentUsuario = null;
 
     function getColorForEstado(estado) {
-      return estadoColores[estado] || 'gray';
+      switch (estado) {
+        case 'visitada': return 'green';
+        case 'no atendieron': return 'red';
+        case 'otro': return 'yellow';
+        default: return 'blue';
+      }
     }
 
     function clearMarkers() {
       markers.forEach(m => map.removeLayer(m));
-      markers = [];
-    }
-
-    function createPopupContent(casa) {
-      return `
-        <b>${casa.direccion}</b><br/>
-        Estado: ${casa.estado || 'sin estado'}<br/>
-        <div class="estado-buttons">
-          <button onclick="cambiarEstado(${casa.id}, 'visitada')">Visitada</button>
-          <button onclick="cambiarEstado(${casa.id}, 'no atendieron')">No atendieron</button>
-          <button onclick="cambiarEstado(${casa.id}, 'otro')">Otro</button>
-          <button onclick="desasignarCasa(${casa.id})" style="background:#ccc;margin-left:10px;">Desasignar</button>
-        </div>
-        <br/>
-        <label>Comentario:</label><br/>
-        <textarea id="comentario-${casa.id}" rows="3">${casa.comentario || ''}</textarea><br/>
-        <button onclick="guardarComentario(${casa.id})">Guardar Comentario</button>
-      `;
+      markers.clear();
     }
 
     function addMarker(casa) {
@@ -74,79 +62,126 @@
         fillOpacity: 0.8,
       }).addTo(map);
 
-      marker.bindPopup(createPopupContent(casa));
-      markers.push(marker);
+      let popupContent = document.createElement('div');
+
+      // Dirección
+      let direccionEl = document.createElement('b');
+      direccionEl.textContent = casa.direccion;
+      popupContent.appendChild(direccionEl);
+      popupContent.appendChild(document.createElement('br'));
+
+      // Estado botones
+      let estadoDiv = document.createElement('div');
+      estadoDiv.classList.add('estado-buttons');
+
+      ['visitada', 'no atendieron', 'otro', ''].forEach(estado => {
+        let btn = document.createElement('button');
+        btn.textContent = estado || 'Sin estado';
+        btn.style.backgroundColor = getColorForEstado(estado);
+        btn.onclick = async () => {
+          try {
+            await fetch('/estado', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: casa.id, estado }),
+            });
+            // Actualización sin mover mapa
+          } catch {
+            alert('Error actualizando estado');
+          }
+        };
+        estadoDiv.appendChild(btn);
+      });
+      popupContent.appendChild(estadoDiv);
+
+      // Comentarios
+      let commentLabel = document.createElement('label');
+      commentLabel.textContent = 'Comentario:';
+      commentLabel.style.display = 'block';
+      popupContent.appendChild(commentLabel);
+
+      let commentInput = document.createElement('textarea');
+      commentInput.value = casa.comentario || '';
+      commentInput.onchange = async () => {
+        try {
+          await fetch('/comentario', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: casa.id, comentario: commentInput.value }),
+          });
+          // No mover mapa
+        } catch {
+          alert('Error guardando comentario');
+        }
+      };
+      popupContent.appendChild(commentInput);
+
+      // Desasignar botón
+      let btnDesasignar = document.createElement('button');
+      btnDesasignar.textContent = 'Desasignar esta casa';
+      btnDesasignar.onclick = async () => {
+        if (!confirm('¿Desasignar esta casa? Se borrarán estado y comentario.')) return;
+        try {
+          await fetch('/desasignar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ids: [casa.id] }),
+          });
+          // Refrescar casas sin mover mapa
+          cargarCasas(currentUsuario);
+        } catch {
+          alert('Error desasignando casa');
+        }
+      };
+      popupContent.appendChild(document.createElement('br'));
+      popupContent.appendChild(btnDesasignar);
+
+      marker.bindPopup(popupContent);
+
+      markers.set(casa.id, marker);
     }
 
     async function cargarCasas(usuario) {
-      if (!usuario) return alert('Ingresá tu nombre');
-      usuarioActual = usuario;
-      clearMarkers();
+      if (!usuario) return;
 
-      const res = await fetch(`/casas/${usuario}`);
-      const casas = await res.json();
+      try {
+        const res = await fetch(`/casas/${usuario}`);
+        if (!res.ok) {
+          alert('Error cargando casas');
+          return;
+        }
+        const casas = await res.json();
 
-      if (!casas.length) {
-        alert('No hay casas asignadas para este usuario');
-        return;
-      }
+        if (!map) {
+          map = L.map('map').setView([-31.4265, -64.4572], 13);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+          }).addTo(map);
+        }
 
-      casas.forEach(addMarker);
-    }
+        clearMarkers();
 
-    async function cambiarEstado(id, estado) {
-      await fetch('/estado', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, estado }),
-      });
-
-      if (usuarioActual) {
-        cargarCasas(usuarioActual);
-      }
-    }
-
-    async function guardarComentario(id) {
-      const textarea = document.getElementById(`comentario-${id}`);
-      if (!textarea) return alert('No se encontró comentario');
-      const comentario = textarea.value;
-
-      await fetch('/comentario', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, comentario }),
-      });
-
-      alert('Comentario guardado');
-    }
-
-    async function desasignarCasa(id) {
-      if (!confirm('¿Querés desasignar esta casa?')) return;
-      await fetch('/desasignar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id }),
-      });
-      if (usuarioActual) {
-        cargarCasas(usuarioActual);
+        casas.forEach(casa => addMarker(casa));
+      } catch (error) {
+        alert('Error cargando casas');
       }
     }
 
     document.getElementById('btnCargar').addEventListener('click', () => {
       const usuario = document.getElementById('usuario').value.trim();
-      if (!usuario) return alert("Escribí tu nombre");
+      if (!usuario) {
+        alert('Ingresá tu nombre');
+        return;
+      }
+      currentUsuario = usuario;
       cargarCasas(usuario);
     });
 
     socket.on('actualizacion', () => {
-      if (usuarioActual) cargarCasas(usuarioActual);
+      if (currentUsuario) {
+        cargarCasas(currentUsuario);
+      }
     });
-
-    // Inicializar mapa centrado en Cosquín
-    map = L.map('map').setView([-31.4413, -64.5144], 14);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors'
-    }).addTo(map);
   </script>
 </body>
 </html>
