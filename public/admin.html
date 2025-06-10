@@ -2,12 +2,12 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Admin</title>
+  <title>Admin - Asignar Casas</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
   <style>
     #map { height: 90vh; }
     .panel { padding: 10px; }
-    .seleccionado { stroke: black; stroke-width: 3px; }
   </style>
 </head>
 <body>
@@ -18,6 +18,7 @@
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
   <script>
     const estadoColores = {
       visitada: 'green',
@@ -31,6 +32,43 @@
     let marcadores = [];
     let seleccionadas = new Set();
 
+    const drawnItems = new L.FeatureGroup();
+    mapa.addLayer(drawnItems);
+
+    const drawControl = new L.Control.Draw({
+      draw: {
+        rectangle: true,
+        polygon: false,
+        circle: false,
+        marker: false,
+        circlemarker: false,
+        polyline: false
+      },
+      edit: {
+        featureGroup: drawnItems,
+        edit: false,
+        remove: false
+      }
+    });
+    mapa.addControl(drawControl);
+
+    mapa.on('draw:created', function (e) {
+      const layer = e.layer;
+      drawnItems.clearLayers();
+      drawnItems.addLayer(layer);
+
+      seleccionadas.clear();
+
+      marcadores.forEach(marker => {
+        if (layer.getBounds().contains(marker.getLatLng())) {
+          seleccionadas.add(marker.options.casaId);
+          marker.setStyle({ weight: 3 });
+        } else {
+          marker.setStyle({ weight: marker.options.asignado ? 2 : 1 });
+        }
+      });
+    });
+
     async function cargarCasas() {
       const res = await fetch('/casas');
       const casas = await res.json();
@@ -40,25 +78,16 @@
 
       casas.forEach(casa => {
         const color = estadoColores[casa.estado] || 'gray';
-        const borde = casa.asignado_a ? 'blue' : 'black';
 
         const marker = L.circleMarker([casa.latitud, casa.longitud], {
           radius: 8,
-          color: borde,
+          color: casa.asignado_a ? 'blue' : 'black',
           fillColor: color,
           fillOpacity: 0.8,
-          casaId: casa.id
+          weight: casa.asignado_a ? 2 : 1,
+          casaId: casa.id,
+          asignado: !!casa.asignado_a
         }).addTo(mapa);
-
-        marker.on('click', () => {
-          if (seleccionadas.has(casa.id)) {
-            seleccionadas.delete(casa.id);
-            marker.setStyle({ weight: 1 });
-          } else {
-            seleccionadas.add(casa.id);
-            marker.setStyle({ weight: 3 });
-          }
-        });
 
         marker.bindPopup(`
           <b>${casa.direccion}</b><br>
@@ -72,15 +101,12 @@
 
     document.getElementById('btnAsignar').addEventListener('click', async () => {
       const usuario = document.getElementById('usuarioAsignar').value.trim();
-      if (!usuario) return alert('Ingresá un nombre de usuario');
-      if (!seleccionadas.size) return alert('Seleccioná al menos una casa');
-
-      const casaIds = [...seleccionadas];
+      if (!usuario || seleccionadas.size === 0) return alert('Faltan datos');
 
       const res = await fetch('/asignar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ casaIds, usuario }),
+        body: JSON.stringify({ usuario, casaIds: [...seleccionadas] })
       });
 
       if (res.ok) {

@@ -6,16 +6,14 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
     #map { height: 100vh; }
-    .visited { background-color: green; }
-    .no-response { background-color: orange; }
-    .other { background-color: gray; }
   </style>
 </head>
 <body>
   <div id="map"></div>
+
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
-    const usuario = prompt("Tu nombre:");
+    const usuario = prompt("Ingresá tu nombre:");
 
     const estadoColores = {
       visitada: 'green',
@@ -23,13 +21,13 @@
       otro: 'gray'
     };
 
-    let mapa = L.map('map').setView([-31.2422, -64.4722], 15);
+    const mapa = L.map('map').setView([-31.2422, -64.4722], 15);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapa);
 
     let marcadores = [];
 
     async function cargarCasas() {
-      const res = await fetch('/casas?usuario=' + encodeURIComponent(usuario));
+      const res = await fetch(`/casas?usuario=${encodeURIComponent(usuario)}`);
       const casas = await res.json();
 
       marcadores.forEach(m => mapa.removeLayer(m));
@@ -48,7 +46,7 @@
         marcador.bindPopup(`
           <b>${casa.direccion}</b><br>
           Estado: ${casa.estado}<br>
-          <textarea id="comentario-${casa.id}" rows="2" cols="20" placeholder="Comentario..."></textarea><br>
+          <textarea id="comentario-${casa.id}" rows="2" cols="25" placeholder="Comentario...">${casa.comentario || ""}</textarea><br>
           <button onclick="cambiarEstado(${casa.id}, 'visitada')">Visitada</button>
           <button onclick="cambiarEstado(${casa.id}, 'no_atendieron')">No atendieron</button>
           <button onclick="cambiarEstado(${casa.id}, 'otro')">Otro</button>
@@ -65,7 +63,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, estado, comentario, usuario }),
       });
-      cargarCasas();
+      cargarCasas(); // Recargar sin reiniciar mapa
     }
 
     cargarCasas();

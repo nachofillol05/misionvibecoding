@@ -52,20 +52,23 @@ app.post('/asignar', async (req, res) => {
 });
 
 // Actualizar estado de una casa (visitada, no atendieron, otro)
+// Reemplazá la ruta /estado actual con esta versión:
 app.post('/estado', async (req, res) => {
-  const { id, estado } = req.body;
+  const { id, estado, comentario, usuario } = req.body;
   try {
     await pool.query(
-      `UPDATE casas SET estado = $1 WHERE id = $2`,
-      [estado, id]
+      `UPDATE casas SET estado = $1, comentario = $2, actualizado_por = $3, updated_at = NOW() WHERE id = $4`,
+      [estado, comentario, usuario, id]
     );
-    io.emit('actualizacion'); // Avisar a todos
+    io.emit('actualizacion');
     res.sendStatus(200);
   } catch (err) {
     console.error(err);
     res.status(500).send('Error al actualizar estado');
   }
 });
+
+
 
 // WebSockets para updates en tiempo real
 io.on('connection', (socket) => {
