@@ -1,72 +1,121 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <meta charset="UTF-8">
-  <title>Misión de Visita</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Visitas Casas - Usuario</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
-    #map { height: 100vh; }
+    #map { height: 80vh; width: 100%; margin-bottom: 1rem; }
+    #login { margin: 1rem; }
+    .estado-buttons button {
+      margin: 0 5px;
+    }
   </style>
 </head>
 <body>
+  <h2>Ingrese su nombre para cargar sus casas asignadas</h2>
+  <div id="login">
+    <input type="text" id="usuario" placeholder="Tu nombre" />
+    <button id="btnCargar">Cargar Casas</button>
+  </div>
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
   <script>
-    const usuario = prompt("Ingresá tu nombre:");
+    const socket = io();
+    let map;
+    let markers = [];
+    let usuarioActual = null;
 
     const estadoColores = {
-      visitada: 'green',
-      no_atendieron: 'orange',
-      otro: 'gray'
+      'visitada': 'green',
+      'no atendieron': 'red',
+      'otro': 'yellow'
     };
 
-    const mapa = L.map('map').setView([-31.2422, -64.4722], 15);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapa);
+    function getColorForEstado(estado) {
+      return estadoColores[estado] || 'gray';
+    }
 
-    let marcadores = [];
+    function clearMarkers() {
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
+    }
 
-    async function cargarCasas() {
-      const res = await fetch(`/casas?usuario=${encodeURIComponent(usuario)}`);
+    function addMarker(casa) {
+      const color = getColorForEstado(casa.estado);
+
+      const marker = L.circleMarker([casa.latitud, casa.longitud], {
+        radius: 8,
+        color,
+        fillColor: color,
+        fillOpacity: 0.8,
+      }).addTo(map);
+
+      marker.bindPopup(`
+        <b>${casa.direccion}</b><br/>
+        Estado: ${casa.estado || 'sin estado'}<br/>
+        <div class="estado-buttons">
+          <button onclick="cambiarEstado(${casa.id}, 'visitada')">Visitada</button>
+          <button onclick="cambiarEstado(${casa.id}, 'no atendieron')">No atendieron</button>
+          <button onclick="cambiarEstado(${casa.id}, 'otro')">Otro</button>
+        </div>
+      `);
+
+      markers.push(marker);
+    }
+
+    async function cargarCasas(usuario) {
+      if (!usuario) return alert('Ingresá tu nombre');
+      usuarioActual = usuario;
+      clearMarkers();
+
+      const res = await fetch(`/casas/${usuario}`);
       const casas = await res.json();
 
-      marcadores.forEach(m => mapa.removeLayer(m));
-      marcadores = [];
+      if (!casas.length) {
+        alert('No hay casas asignadas para este usuario');
+        return;
+      }
 
-      casas.forEach(casa => {
-        const color = estadoColores[casa.estado] || 'gray';
+      casas.forEach(addMarker);
 
-        const marcador = L.circleMarker([casa.latitud, casa.longitud], {
-          radius: 8,
-          color: color,
-          fillColor: color,
-          fillOpacity: 0.8,
-        }).addTo(mapa);
-
-        marcador.bindPopup(`
-          <b>${casa.direccion}</b><br>
-          Estado: ${casa.estado}<br>
-          <textarea id="comentario-${casa.id}" rows="2" cols="25" placeholder="Comentario...">${casa.comentario || ""}</textarea><br>
-          <button onclick="cambiarEstado(${casa.id}, 'visitada')">Visitada</button>
-          <button onclick="cambiarEstado(${casa.id}, 'no_atendieron')">No atendieron</button>
-          <button onclick="cambiarEstado(${casa.id}, 'otro')">Otro</button>
-        `);
-
-        marcadores.push(marcador);
-      });
+      // Centrar el mapa en la primera casa
+      if (casas.length) {
+        map.setView([casas[0].latitud, casas[0].longitud], 14);
+      }
     }
 
     async function cambiarEstado(id, estado) {
-      const comentario = document.getElementById(`comentario-${id}`).value;
       await fetch('/estado', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, estado, comentario, usuario }),
+        body: JSON.stringify({ id, estado }),
       });
-      cargarCasas(); // Recargar sin reiniciar mapa
+
+      // Recargar casas del usuario actual sin redirigir
+      if (usuarioActual) {
+        cargarCasas(usuarioActual);
+      }
     }
 
-    cargarCasas();
+    document.getElementById('btnCargar').addEventListener('click', () => {
+      const usuario = document.getElementById('usuario').value.trim();
+      if (!usuario) return alert("Escribí tu nombre");
+      cargarCasas(usuario);
+    });
+
+    socket.on('actualizacion', () => {
+      if (usuarioActual) cargarCasas(usuarioActual);
+    });
+
+    // Inicializar mapa
+    map = L.map('map').setView([-31.2475, -64.4658], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
   </script>
 </body>
 </html>
