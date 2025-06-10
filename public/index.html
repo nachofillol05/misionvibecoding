@@ -5,37 +5,30 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Usuario - Misiones Casas</title>
 
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet/dist/leaflet.css"
-  />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
     #map { height: 80vh; width: 100%; margin-bottom: 1rem; }
-    #login { margin: 1rem; }
+    textarea { width: 100%; height: 50px; margin-top: 5px; }
     .estado-buttons button {
-      margin: 0 5px;
-    }
-    textarea {
-      width: 100%;
-      height: 50px;
-      resize: none;
+      margin-right: 5px;
+      margin-top: 5px;
+      padding: 5px 10px;
     }
   </style>
 </head>
 <body>
-  <h2>Ingrese su nombre para cargar sus casas asignadas</h2>
-  <div id="login">
-    <input type="text" id="usuario" placeholder="Tu nombre" />
-    <button id="btnCargar">Cargar Casas</button>
-  </div>
+  <h2>Panel Usuario - Casas Asignadas</h2>
+  <input type="text" id="usuario" placeholder="Ingresá tu nombre" />
+  <button id="btnCargar">Cargar Casas</button>
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="/socket.io/socket.io.js"></script>
+
   <script>
     const socket = io();
 
-    let map;
+    let map = null;
     let markers = new Map();
     let currentUsuario = null;
 
@@ -49,7 +42,7 @@
     }
 
     function clearMarkers() {
-      markers.forEach(m => map.removeLayer(m));
+      markers.forEach(marker => map.removeLayer(marker));
       markers.clear();
     }
 
@@ -85,7 +78,7 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ id: casa.id, estado }),
             });
-            // Actualización sin mover mapa
+            // Actualización sin mover mapa ni centrar
           } catch {
             alert('Error actualizando estado');
           }
@@ -109,35 +102,14 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: casa.id, comentario: commentInput.value }),
           });
-          // No mover mapa
+          // No mover mapa ni centrar
         } catch {
           alert('Error guardando comentario');
         }
       };
       popupContent.appendChild(commentInput);
 
-      // Desasignar botón
-      let btnDesasignar = document.createElement('button');
-      btnDesasignar.textContent = 'Desasignar esta casa';
-      btnDesasignar.onclick = async () => {
-        if (!confirm('¿Desasignar esta casa? Se borrarán estado y comentario.')) return;
-        try {
-          await fetch('/desasignar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ids: [casa.id] }),
-          });
-          // Refrescar casas sin mover mapa
-          cargarCasas(currentUsuario);
-        } catch {
-          alert('Error desasignando casa');
-        }
-      };
-      popupContent.appendChild(document.createElement('br'));
-      popupContent.appendChild(btnDesasignar);
-
       marker.bindPopup(popupContent);
-
       markers.set(casa.id, marker);
     }
 
@@ -160,8 +132,7 @@
         }
 
         clearMarkers();
-
-        casas.forEach(casa => addMarker(casa));
+        casas.forEach(addMarker);
       } catch (error) {
         alert('Error cargando casas');
       }
@@ -178,9 +149,7 @@
     });
 
     socket.on('actualizacion', () => {
-      if (currentUsuario) {
-        cargarCasas(currentUsuario);
-      }
+      if (currentUsuario) cargarCasas(currentUsuario);
     });
   </script>
 </body>

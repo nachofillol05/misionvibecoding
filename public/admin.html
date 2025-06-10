@@ -5,14 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Admin - Misiones Casas</title>
 
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet/dist/leaflet.css"
-  />
-  <link
-    rel="stylesheet"
-    href="https://unpkg.com/leaflet-draw/dist/leaflet.draw.css"
-  />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw/dist/leaflet.draw.css" />
   <style>
     #map { height: 80vh; width: 100%; margin-bottom: 1rem; }
     #controles { margin: 10px; }
@@ -47,7 +41,6 @@
     // Colores por estado y asignacion
     function getColor(casa) {
       if (seleccionados.has(casa.id)) return 'orange'; // selección activa
-
       if (!casa.asignado_a) return 'gray'; // sin asignar
       switch (casa.estado) {
         case 'visitada': return 'green';
@@ -104,6 +97,42 @@
       }
     }
 
+    // Leaflet.draw para seleccionar con rectángulo
+    const drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    const drawControl = new L.Control.Draw({
+      draw: {
+        polygon: false,
+        polyline: false,
+        circle: false,
+        marker: false,
+        circlemarker: false,
+        rectangle: true,
+      },
+      edit: false,
+    });
+    map.addControl(drawControl);
+
+    map.on(L.Draw.Event.CREATED, e => {
+      const layer = e.layer;
+      drawnItems.clearLayers(); // solo 1 selección a la vez para simplificar
+      drawnItems.addLayer(layer);
+
+      seleccionados.clear();
+
+      // Obtener bounds del rectángulo
+      const bounds = layer.getBounds();
+
+      // Marcar todos los markers dentro del rectángulo como seleccionados
+      casas.forEach(casa => {
+        if (bounds.contains([casa.latitud, casa.longitud])) {
+          seleccionados.add(casa.id);
+        }
+      });
+      pintarCasas();
+    });
+
     document.getElementById('btnAsignar').addEventListener('click', async () => {
       const usuario = document.getElementById('usuarioAsignar').value.trim();
       if (!usuario) return alert('Ingresá un nombre de usuario');
@@ -113,12 +142,13 @@
       try {
         const res = await fetch('/asignar', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ ids: Array.from(seleccionados), usuario })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: Array.from(seleccionados), usuario }),
         });
         if (res.ok) {
           alert('Casas asignadas');
           seleccionados.clear();
+          drawnItems.clearLayers();
           cargarCasas();
         } else {
           alert('Error asignando casas');
@@ -131,15 +161,18 @@
     document.getElementById('btnDesasignar').addEventListener('click', async () => {
       if (seleccionados.size === 0) return alert('No hay casas seleccionadas');
 
+      if (!confirm('¿Desasignar casas seleccionadas? Se borrarán estado y comentario.')) return;
+
       try {
         const res = await fetch('/desasignar', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({ ids: Array.from(seleccionados) })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids: Array.from(seleccionados) }),
         });
         if (res.ok) {
           alert('Casas desasignadas');
           seleccionados.clear();
+          drawnItems.clearLayers();
           cargarCasas();
         } else {
           alert('Error desasignando casas');
@@ -151,7 +184,4 @@
 
     socket.on('actualizacion', cargarCasas);
 
-    cargarCasas();
-  </script>
-</body>
-</html>
+    cargar
