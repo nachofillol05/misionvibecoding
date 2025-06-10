@@ -8,13 +8,28 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw/dist/leaflet.draw.css" />
   <style>
-    #map { height: 80vh; width: 100%; margin-bottom: 1rem; }
-    #controles { margin: 10px; }
-    button { margin-right: 10px; }
+    html, body, #map {
+      height: 100%;
+      margin: 0;
+      padding: 0;
+    }
+    #controles {
+      padding: 10px;
+      background: #f0f0f0;
+    }
+    button {
+      margin-right: 10px;
+      margin-top: 5px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    input {
+      padding: 5px;
+      width: 200px;
+    }
   </style>
 </head>
 <body>
-  <h2>Panel Admin - Asignar y Desasignar Casas</h2>
   <div id="controles">
     <input type="text" id="usuarioAsignar" placeholder="Nombre usuario para asignar" />
     <button id="btnAsignar">Asignar casas seleccionadas</button>
@@ -29,14 +44,15 @@
   <script>
     const socket = io();
 
-    let map = L.map('map').setView([-31.4265, -64.4572], 13); // Centro en Cosquín
+    // Inicializamos mapa centrado en Cosquín
+    const map = L.map('map').setView([-31.4265, -64.4572], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
 
     let casas = [];
-    let markers = new Map(); // id => marker
-    let seleccionados = new Set();
+    const markers = new Map();
+    const seleccionados = new Set();
 
     // Colores por estado y asignacion
     function getColor(casa) {
@@ -50,12 +66,14 @@
       }
     }
 
+    // Limpia marcadores del mapa
     function clearMarkers() {
-      markers.forEach(marker => map.removeLayer(marker));
+      markers.forEach(m => map.removeLayer(m));
       markers.clear();
       seleccionados.clear();
     }
 
+    // Dibuja los marcadores con colores y bindPopup
     function pintarCasas() {
       clearMarkers();
       casas.forEach(casa => {
@@ -65,8 +83,11 @@
           color,
           fillColor: color,
           fillOpacity: 0.8,
+          weight: 2,
+          opacity: 1
         }).addTo(map);
 
+        // Toggle selección al hacer click en marcador
         marker.on('click', () => {
           if (seleccionados.has(casa.id)) {
             seleccionados.delete(casa.id);
@@ -76,28 +97,31 @@
           pintarCasas();
         });
 
-        marker.bindPopup(`
+        // Popup con info
+        const popupHTML = `
           <b>${casa.direccion}</b><br/>
           Estado: ${casa.estado || 'sin estado'}<br/>
           Asignado a: ${casa.asignado_a || 'Nadie'}<br/>
           Comentario: ${casa.comentario || '(vacío)'}
-        `);
+        `;
+        marker.bindPopup(popupHTML);
 
         markers.set(casa.id, marker);
       });
     }
 
+    // Carga las casas del backend
     async function cargarCasas() {
       try {
         const res = await fetch('/casas');
         casas = await res.json();
         pintarCasas();
-      } catch (err) {
+      } catch {
         alert('Error cargando casas');
       }
     }
 
-    // Leaflet.draw para seleccionar con rectángulo
+    // Leaflet.draw para selección rectangular
     const drawnItems = new L.FeatureGroup();
     map.addLayer(drawnItems);
 
@@ -106,9 +130,9 @@
         polygon: false,
         polyline: false,
         circle: false,
-        marker: false,
         circlemarker: false,
-        rectangle: true,
+        marker: false,
+        rectangle: true
       },
       edit: false,
     });
@@ -116,15 +140,13 @@
 
     map.on(L.Draw.Event.CREATED, e => {
       const layer = e.layer;
-      drawnItems.clearLayers(); // solo 1 selección a la vez para simplificar
+      drawnItems.clearLayers();
       drawnItems.addLayer(layer);
 
       seleccionados.clear();
 
-      // Obtener bounds del rectángulo
       const bounds = layer.getBounds();
 
-      // Marcar todos los markers dentro del rectángulo como seleccionados
       casas.forEach(casa => {
         if (bounds.contains([casa.latitud, casa.longitud])) {
           seleccionados.add(casa.id);
@@ -133,17 +155,23 @@
       pintarCasas();
     });
 
+    // Botón asignar
     document.getElementById('btnAsignar').addEventListener('click', async () => {
       const usuario = document.getElementById('usuarioAsignar').value.trim();
-      if (!usuario) return alert('Ingresá un nombre de usuario');
-
-      if (seleccionados.size === 0) return alert('No hay casas seleccionadas');
+      if (!usuario) {
+        alert('Ingresá un nombre de usuario');
+        return;
+      }
+      if (seleccionados.size === 0) {
+        alert('No hay casas seleccionadas');
+        return;
+      }
 
       try {
         const res = await fetch('/asignar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids: Array.from(seleccionados), usuario }),
+          body: JSON.stringify({ ids: Array.from(seleccionados), usuario })
         });
         if (res.ok) {
           alert('Casas asignadas');
@@ -158,16 +186,20 @@
       }
     });
 
+    // Botón desasignar
     document.getElementById('btnDesasignar').addEventListener('click', async () => {
-      if (seleccionados.size === 0) return alert('No hay casas seleccionadas');
-
-      if (!confirm('¿Desasignar casas seleccionadas? Se borrarán estado y comentario.')) return;
-
+      if (seleccionados.size === 0) {
+        alert('No hay casas seleccionadas');
+        return;
+      }
+      if (!confirm('¿Desasignar casas seleccionadas? Se borrarán estado y comentario.')) {
+        return;
+      }
       try {
         const res = await fetch('/desasignar', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids: Array.from(seleccionados) }),
+          body: JSON.stringify({ ids: Array.from(seleccionados) })
         });
         if (res.ok) {
           alert('Casas desasignadas');
@@ -184,4 +216,7 @@
 
     socket.on('actualizacion', cargarCasas);
 
-    cargar
+    cargarCasas();
+  </script>
+</body>
+</html>

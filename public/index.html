@@ -13,6 +13,7 @@
       margin-right: 5px;
       margin-top: 5px;
       padding: 5px 10px;
+      cursor: pointer;
     }
   </style>
 </head>
@@ -63,13 +64,13 @@
       popupContent.appendChild(direccionEl);
       popupContent.appendChild(document.createElement('br'));
 
-      // Estado botones
+      // Estado botones (solo los 3 clásicos)
       let estadoDiv = document.createElement('div');
       estadoDiv.classList.add('estado-buttons');
 
-      ['visitada', 'no atendieron', 'otro', ''].forEach(estado => {
+      ['visitada', 'no atendieron', 'otro'].forEach(estado => {
         let btn = document.createElement('button');
-        btn.textContent = estado || 'Sin estado';
+        btn.textContent = estado;
         btn.style.backgroundColor = getColorForEstado(estado);
         btn.onclick = async () => {
           try {
@@ -78,7 +79,6 @@
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ id: casa.id, estado }),
             });
-            // Actualización sin mover mapa ni centrar
           } catch {
             alert('Error actualizando estado');
           }
@@ -102,7 +102,6 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: casa.id, comentario: commentInput.value }),
           });
-          // No mover mapa ni centrar
         } catch {
           alert('Error guardando comentario');
         }

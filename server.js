@@ -82,18 +82,16 @@ app.post('/asignar', async (req, res) => {
 
 // Desasignar casas (admin)
 app.post('/desasignar', async (req, res) => {
-  const { ids } = req.body; // ids es array
-  try {
-    await pool.query(
-      'UPDATE casas SET asignado_a = NULL, estado = NULL, comentario = NULL WHERE id = ANY($1::int[])',
-      [ids]
-    );
-    io.emit('actualizacion');
-    res.sendStatus(200);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('Error desasignando casas');
+  const { ids } = req.body; // espera array
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).send('No se pasaron ids');
   }
+  await pool.query(
+    `UPDATE casas SET asignado_a = NULL, estado = NULL, comentario = NULL WHERE id = ANY($1::int[])`,
+    [ids]
+  );
+  io.emit('actualizacion');
+  res.sendStatus(200);
 });
 
 const PORT = process.env.PORT || 3000;
