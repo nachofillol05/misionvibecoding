@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>Misión Casas</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <style>
+    #map { height: 600px; }
+    .popup select, .popup input { width: 100%; margin-top: 5px; }
+  </style>
+</head>
+<body>
+  <h2>Misión Casas</h2>
+  <div>Usuario: <input id="usuario" placeholder="Tu nombre"><button onclick="iniciar()">Iniciar</button></div>
+  <div id="map"></div>
+
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const map = L.map('map').setView([-34.61, -58.38], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const socket = io();
+    let usuario = '';
+    let marcadores = {};
+
+    function iniciar() {
+      usuario = document.getElementById('usuario').value || 'Anonimo';
+      cargarCasas();
+    }
+
+    async function cargarCasas() {
+      const res = await fetch('/casas');
+      const casas = await res.json();
+      casas.forEach(casa => agregarMarcador(casa));
+    }
+
+    function agregarMarcador(casa) {
+      const marker = L.marker([casa.latitud, casa.longitud], { casaId: casa.id }).addTo(map);
+      marker.bindPopup(generarPopup(casa));
+      marcadores[casa.id] = marker;
+    }
+
+    function generarPopup(casa) {
+      return `
+        <div class="popup">
+          <strong>${casa.direccion}</strong><br>
+          Estado:
+          <select id="estado-${casa.id}">
+            <option ${casa.estado==='visitada'?'selected':''}>visitada</option>
+            <option ${casa.estado==='no atendieron'?'selected':''}>no atendieron</option>
+            <option ${casa.estado==='otro'?'selected':''}>otro</option>
+          </select><br>
+          Comentario: <input id="comentario-${casa.id}" value="${casa.comentario || ''}">
+          <button onclick="guardarEstado(${casa.id})">Guardar</button>
+          <small>Último: ${casa.actualizado_por || '-'} - ${new Date(casa.updated_at).toLocaleString()}</small>
+        </div>
+      `;
+    }
+
+    async function guardarEstado(id) {
+      const estado = document.getElementById(`estado-${id}`).value;
+      const comentario = document.getElementById(`comentario-${id}`).value;
+      const res = await fetch(`/casas/${id}/estado`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ estado, comentario, actualizado_por: usuario })
+      });
+      const actualizada = await res.json();
+      marcadores[id].setPopupContent(generarPopup(actualizada));
+    }
+
+    socket.on('casaActualizada', casa => {
+      if (marcadores[casa.id]) {
+        marcadores[casa.id].setPopupContent(generarPopup(casa));
+      }
+    });
+  </script>
+</body>
+</html>
