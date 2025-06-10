@@ -9,7 +9,11 @@
     #map { height: 80vh; width: 100%; margin-bottom: 1rem; }
     #login { margin: 1rem; }
     .estado-buttons button {
-      margin: 0 5px;
+      margin: 0 5px 5px 0;
+    }
+    textarea {
+      width: 100%;
+      resize: vertical;
     }
   </style>
 </head>
@@ -44,9 +48,25 @@
       markers = [];
     }
 
+    function createPopupContent(casa) {
+      return `
+        <b>${casa.direccion}</b><br/>
+        Estado: ${casa.estado || 'sin estado'}<br/>
+        <div class="estado-buttons">
+          <button onclick="cambiarEstado(${casa.id}, 'visitada')">Visitada</button>
+          <button onclick="cambiarEstado(${casa.id}, 'no atendieron')">No atendieron</button>
+          <button onclick="cambiarEstado(${casa.id}, 'otro')">Otro</button>
+          <button onclick="desasignarCasa(${casa.id})" style="background:#ccc;margin-left:10px;">Desasignar</button>
+        </div>
+        <br/>
+        <label>Comentario:</label><br/>
+        <textarea id="comentario-${casa.id}" rows="3">${casa.comentario || ''}</textarea><br/>
+        <button onclick="guardarComentario(${casa.id})">Guardar Comentario</button>
+      `;
+    }
+
     function addMarker(casa) {
       const color = getColorForEstado(casa.estado);
-
       const marker = L.circleMarker([casa.latitud, casa.longitud], {
         radius: 8,
         color,
@@ -54,16 +74,7 @@
         fillOpacity: 0.8,
       }).addTo(map);
 
-      marker.bindPopup(`
-        <b>${casa.direccion}</b><br/>
-        Estado: ${casa.estado || 'sin estado'}<br/>
-        <div class="estado-buttons">
-          <button onclick="cambiarEstado(${casa.id}, 'visitada')">Visitada</button>
-          <button onclick="cambiarEstado(${casa.id}, 'no atendieron')">No atendieron</button>
-          <button onclick="cambiarEstado(${casa.id}, 'otro')">Otro</button>
-        </div>
-      `);
-
+      marker.bindPopup(createPopupContent(casa));
       markers.push(marker);
     }
 
@@ -81,11 +92,6 @@
       }
 
       casas.forEach(addMarker);
-
-      // Centrar el mapa en la primera casa
-      if (casas.length) {
-        map.setView([casas[0].latitud, casas[0].longitud], 14);
-      }
     }
 
     async function cambiarEstado(id, estado) {
@@ -95,7 +101,32 @@
         body: JSON.stringify({ id, estado }),
       });
 
-      // Recargar casas del usuario actual sin redirigir
+      if (usuarioActual) {
+        cargarCasas(usuarioActual);
+      }
+    }
+
+    async function guardarComentario(id) {
+      const textarea = document.getElementById(`comentario-${id}`);
+      if (!textarea) return alert('No se encontró comentario');
+      const comentario = textarea.value;
+
+      await fetch('/comentario', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, comentario }),
+      });
+
+      alert('Comentario guardado');
+    }
+
+    async function desasignarCasa(id) {
+      if (!confirm('¿Querés desasignar esta casa?')) return;
+      await fetch('/desasignar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
       if (usuarioActual) {
         cargarCasas(usuarioActual);
       }
@@ -111,8 +142,8 @@
       if (usuarioActual) cargarCasas(usuarioActual);
     });
 
-    // Inicializar mapa
-    map = L.map('map').setView([-31.2475, -64.4658], 13);
+    // Inicializar mapa centrado en Cosquín
+    map = L.map('map').setView([-31.4413, -64.5144], 14);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
