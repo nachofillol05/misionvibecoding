@@ -25,6 +25,7 @@
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
   <script>
     const estadoColores = {
       visitada: 'green',
@@ -44,7 +45,7 @@
     const drawControl = new L.Control.Draw({
       draw: {
         rectangle: true,
-        polygon: false,
+        polygon: true,       // Habilitamos polígonos libres
         circle: false,
         marker: false,
         circlemarker: false,
@@ -65,8 +66,12 @@
 
       seleccionadas.clear();
 
+      // Obtenemos GeoJSON del polígono dibujado o del rectángulo (que es un polígono también)
+      const polygon = layer.toGeoJSON();
+
       marcadores.forEach(marker => {
-        if (layer.getBounds().contains(marker.getLatLng())) {
+        const point = turf.point([marker.getLatLng().lng, marker.getLatLng().lat]);
+        if (turf.booleanPointInPolygon(point, polygon)) {
           seleccionadas.add(marker.options.casaId);
           marker.setStyle({ weight: 3 });
         } else {
@@ -112,14 +117,14 @@
       const res = await fetch('/asignar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Cambié la propiedad ids para que coincida con el backend
-        body: JSON.stringify({ usuario, ids: [...seleccionadas] })
+        body: JSON.stringify({ usuario, ids: [...seleccionadas] }) // coincide con backend
       });
 
       if (res.ok) {
         alert('Casas asignadas');
         seleccionadas.clear();
         cargarCasas();
+        drawnItems.clearLayers();
       } else {
         alert('Error al asignar');
       }
@@ -133,14 +138,14 @@
       const res = await fetch('/desasignar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        // Para desasignar enviamos array de ids
-        body: JSON.stringify({ ids: [...seleccionadas] })
+        body: JSON.stringify({ ids: [...seleccionadas] })  // backend debe aceptar array ids
       });
 
       if (res.ok) {
         alert('Casas desasignadas');
         seleccionadas.clear();
         cargarCasas();
+        drawnItems.clearLayers();
       } else {
         alert('Error al desasignar');
       }
