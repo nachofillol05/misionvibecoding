@@ -1,69 +1,81 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Admin - Asignar Casas</title>
+  <meta charset="UTF-8">
+  <title>Admin</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
-    body { font-family: Arial, sans-serif; padding: 1rem; }
-    table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background-color: #f2f2f2; }
-    #usuarioAsignar { width: 200px; }
-    #btnAsignar { margin-left: 10px; }
+    #map { height: 90vh; }
+    .panel { padding: 10px; }
+    .seleccionado { stroke: black; stroke-width: 3px; }
   </style>
 </head>
 <body>
-  <h2>Panel de Administración - Asignar Casas</h2>
-  <label>Nombre del usuario a asignar:</label>
-  <input type="text" id="usuarioAsignar" placeholder="Nombre usuario" />
-  <button id="btnAsignar">Asignar Casas Seleccionadas</button>
+  <div class="panel">
+    Usuario a asignar: <input type="text" id="usuarioAsignar">
+    <button id="btnAsignar">Asignar</button>
+  </div>
+  <div id="map"></div>
 
-  <table id="tablaCasas">
-    <thead>
-      <tr>
-        <th><input type="checkbox" id="checkTodos" /></th>
-        <th>ID</th>
-        <th>Dirección</th>
-        <th>Estado</th>
-        <th>Asignado a</th>
-      </tr>
-    </thead>
-    <tbody></tbody>
-  </table>
-
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
+    const estadoColores = {
+      visitada: 'green',
+      no_atendieron: 'orange',
+      otro: 'gray'
+    };
+
+    const mapa = L.map('map').setView([-31.2422, -64.4722], 15);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapa);
+
+    let marcadores = [];
+    let seleccionadas = new Set();
+
     async function cargarCasas() {
       const res = await fetch('/casas');
       const casas = await res.json();
-      const tbody = document.querySelector('#tablaCasas tbody');
-      tbody.innerHTML = '';
+
+      marcadores.forEach(m => mapa.removeLayer(m));
+      marcadores = [];
+
       casas.forEach(casa => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td><input type="checkbox" class="checkCasa" value="${casa.id}" /></td>
-          <td>${casa.id}</td>
-          <td>${casa.direccion}</td>
-          <td>${casa.estado || ''}</td>
-          <td>${casa.asignado_a || ''}</td>
-        `;
-        tbody.appendChild(tr);
+        const color = estadoColores[casa.estado] || 'gray';
+        const borde = casa.asignado_a ? 'blue' : 'black';
+
+        const marker = L.circleMarker([casa.latitud, casa.longitud], {
+          radius: 8,
+          color: borde,
+          fillColor: color,
+          fillOpacity: 0.8,
+          casaId: casa.id
+        }).addTo(mapa);
+
+        marker.on('click', () => {
+          if (seleccionadas.has(casa.id)) {
+            seleccionadas.delete(casa.id);
+            marker.setStyle({ weight: 1 });
+          } else {
+            seleccionadas.add(casa.id);
+            marker.setStyle({ weight: 3 });
+          }
+        });
+
+        marker.bindPopup(`
+          <b>${casa.direccion}</b><br>
+          Estado: ${casa.estado}<br>
+          Asignado a: ${casa.asignado_a || 'nadie'}
+        `);
+
+        marcadores.push(marker);
       });
     }
-
-    document.getElementById('checkTodos').addEventListener('change', function() {
-      const checked = this.checked;
-      document.querySelectorAll('.checkCasa').forEach(chk => chk.checked = checked);
-    });
 
     document.getElementById('btnAsignar').addEventListener('click', async () => {
       const usuario = document.getElementById('usuarioAsignar').value.trim();
       if (!usuario) return alert('Ingresá un nombre de usuario');
+      if (!seleccionadas.size) return alert('Seleccioná al menos una casa');
 
-      const checkboxes = document.querySelectorAll('.checkCasa:checked');
-      if (!checkboxes.length) return alert('Seleccioná al menos una casa');
-
-      const casaIds = Array.from(checkboxes).map(chk => parseInt(chk.value));
+      const casaIds = [...seleccionadas];
 
       const res = await fetch('/asignar', {
         method: 'POST',
@@ -72,10 +84,11 @@
       });
 
       if (res.ok) {
-        alert('Casas asignadas correctamente');
+        alert('Casas asignadas');
+        seleccionadas.clear();
         cargarCasas();
       } else {
-        alert('Error al asignar casas');
+        alert('Error al asignar');
       }
     });
 
