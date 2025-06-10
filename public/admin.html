@@ -1,19 +1,25 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Admin - Asignar Casas</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
   <style>
     #map { height: 90vh; }
     .panel { padding: 10px; }
+    button {
+      margin-left: 10px;
+      padding: 5px 10px;
+      cursor: pointer;
+    }
   </style>
 </head>
 <body>
   <div class="panel">
-    Usuario a asignar: <input type="text" id="usuarioAsignar">
+    Usuario a asignar: <input type="text" id="usuarioAsignar" />
     <button id="btnAsignar">Asignar</button>
+    <button id="btnDesasignar">Desasignar seleccionadas</button>
   </div>
   <div id="map"></div>
 
@@ -91,7 +97,7 @@
 
         marker.bindPopup(`
           <b>${casa.direccion}</b><br>
-          Estado: ${casa.estado}<br>
+          Estado: ${casa.estado || '(sin estado)'}<br>
           Asignado a: ${casa.asignado_a || 'nadie'}
         `);
 
@@ -101,12 +107,13 @@
 
     document.getElementById('btnAsignar').addEventListener('click', async () => {
       const usuario = document.getElementById('usuarioAsignar').value.trim();
-      if (!usuario || seleccionadas.size === 0) return alert('Faltan datos');
+      if (!usuario || seleccionadas.size === 0) return alert('Faltan datos o casas seleccionadas');
 
       const res = await fetch('/asignar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usuario, casaIds: [...seleccionadas] })
+        // Cambié la propiedad ids para que coincida con el backend
+        body: JSON.stringify({ usuario, ids: [...seleccionadas] })
       });
 
       if (res.ok) {
@@ -115,6 +122,27 @@
         cargarCasas();
       } else {
         alert('Error al asignar');
+      }
+    });
+
+    document.getElementById('btnDesasignar').addEventListener('click', async () => {
+      if (seleccionadas.size === 0) return alert('No hay casas seleccionadas para desasignar');
+
+      if (!confirm('¿Seguro quieres desasignar las casas seleccionadas? Esto borrará estado y comentario.')) return;
+
+      const res = await fetch('/desasignar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Para desasignar enviamos array de ids
+        body: JSON.stringify({ ids: [...seleccionadas] })
+      });
+
+      if (res.ok) {
+        alert('Casas desasignadas');
+        seleccionadas.clear();
+        cargarCasas();
+      } else {
+        alert('Error al desasignar');
       }
     });
 
