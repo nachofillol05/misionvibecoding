@@ -3,152 +3,116 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Usuario - Misiones Casas</title>
-
+  <title>Mis casas asignadas</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
-    #map { height: 80vh; width: 100%; margin-bottom: 1rem; }
-    textarea { width: 100%; height: 50px; margin-top: 5px; }
-    .estado-buttons button {
-      margin-right: 5px;
-      margin-top: 5px;
-      padding: 5px 10px;
-      cursor: pointer;
-    }
+    #map { height: calc(100vh - 150px); }
   </style>
 </head>
 <body>
-  <h2>Panel Usuario - Casas Asignadas</h2>
-  <input type="text" id="usuario" placeholder="Ingresá tu nombre" />
-  <button id="btnCargar">Cargar Casas</button>
+  <div class="container py-3">
+    <h4>Ingrese su nombre:</h4>
+    <div class="input-group mb-3">
+      <input type="text" id="usuario" class="form-control" placeholder="Tu nombre" />
+      <button id="btnCargar" class="btn btn-primary">Cargar casas</button>
+      <button id="toggleVisitadas" class="btn btn-secondary">Ocultar visitadas</button>
+    </div>
+  </div>
   <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="/socket.io/socket.io.js"></script>
-
   <script>
     const socket = io();
+    const map = L.map('map').setView([-31.2475, -64.4658], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    let map = null;
-    let markers = new Map();
-    let currentUsuario = null;
+    let markers = [];
+    let mostrarVisitadas = true;
 
     function getColorForEstado(estado) {
       switch (estado) {
         case 'visitada': return 'green';
-        case 'no atendieron': return 'red';
-        case 'otro': return 'yellow';
+        case 'no_atendieron': return 'orange';
+        case 'otro': return 'gray';
         default: return 'blue';
       }
     }
 
     function clearMarkers() {
-      markers.forEach(marker => map.removeLayer(marker));
-      markers.clear();
-    }
-
-    function addMarker(casa) {
-      const color = getColorForEstado(casa.estado);
-      const marker = L.circleMarker([casa.latitud, casa.longitud], {
-        radius: 8,
-        color,
-        fillColor: color,
-        fillOpacity: 0.8,
-      }).addTo(map);
-
-      let popupContent = document.createElement('div');
-
-      // Dirección
-      let direccionEl = document.createElement('b');
-      direccionEl.textContent = casa.direccion;
-      popupContent.appendChild(direccionEl);
-      popupContent.appendChild(document.createElement('br'));
-
-      // Estado botones (solo los 3 clásicos)
-      let estadoDiv = document.createElement('div');
-      estadoDiv.classList.add('estado-buttons');
-
-      ['visitada', 'no atendieron', 'otro'].forEach(estado => {
-        let btn = document.createElement('button');
-        btn.textContent = estado;
-        btn.style.backgroundColor = getColorForEstado(estado);
-        btn.onclick = async () => {
-          try {
-            await fetch('/estado', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: casa.id, estado }),
-            });
-          } catch {
-            alert('Error actualizando estado');
-          }
-        };
-        estadoDiv.appendChild(btn);
-      });
-      popupContent.appendChild(estadoDiv);
-
-      // Comentarios
-      let commentLabel = document.createElement('label');
-      commentLabel.textContent = 'Comentario:';
-      commentLabel.style.display = 'block';
-      popupContent.appendChild(commentLabel);
-
-      let commentInput = document.createElement('textarea');
-      commentInput.value = casa.comentario || '';
-      commentInput.onchange = async () => {
-        try {
-          await fetch('/comentario', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: casa.id, comentario: commentInput.value }),
-          });
-        } catch {
-          alert('Error guardando comentario');
-        }
-      };
-      popupContent.appendChild(commentInput);
-
-      marker.bindPopup(popupContent);
-      markers.set(casa.id, marker);
+      markers.forEach(m => map.removeLayer(m));
+      markers = [];
     }
 
     async function cargarCasas(usuario) {
-      if (!usuario) return;
+      if (!usuario) return alert('Ingresá tu nombre');
+      clearMarkers();
+      const res = await fetch(`/casas/${usuario}`);
+      const casas = await res.json();
 
-      try {
-        const res = await fetch(`/casas/${usuario}`);
-        if (!res.ok) {
-          alert('Error cargando casas');
-          return;
-        }
-        const casas = await res.json();
+      casas.forEach(casa => {
+        if (!mostrarVisitadas && casa.estado === 'visitada') return;
+        const color = getColorForEstado(casa.estado);
+        const marker = L.circleMarker([casa.latitud, casa.longitud], {
+          radius: 8,
+          color,
+          fillColor: color,
+          fillOpacity: 0.8
+        }).addTo(map);
 
-        if (!map) {
-          map = L.map('map').setView([-31.4265, -64.4572], 13);
-          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; OpenStreetMap contributors'
-          }).addTo(map);
-        }
+        marker.bindPopup(`
+          <b>${casa.direccion}</b><br>
+          Estado: ${casa.estado || 'sin estado'}<br><br>
+          <div class="btn-group btn-group-sm">
+            <button onclick="cambiarEstado(${casa.id}, 'visitada')" class="btn btn-success">Visitada</button>
+            <button onclick="cambiarEstado(${casa.id}, 'no_atendieron')" class="btn btn-warning">No atendieron</button>
+            <button onclick="cambiarEstado(${casa.id}, 'otro')" class="btn btn-secondary">Otro</button>
+          </div>
+          <br><br>
+          <textarea onchange="guardarComentario(${casa.id}, this.value)" placeholder="Comentario..." class="form-control mt-2">${casa.comentario || ''}</textarea>
+        `);
 
-        clearMarkers();
-        casas.forEach(addMarker);
-      } catch (error) {
-        alert('Error cargando casas');
+        markers.push(marker);
+      });
+
+      if (casas.length) {
+        map.setView([casas[0].latitud, casas[0].longitud], 14);
       }
+    }
+
+    async function cambiarEstado(id, estado) {
+      await fetch('/estado', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, estado })
+      });
+    }
+
+    async function guardarComentario(id, comentario) {
+      await fetch('/comentario', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, comentario })
+      });
     }
 
     document.getElementById('btnCargar').addEventListener('click', () => {
       const usuario = document.getElementById('usuario').value.trim();
-      if (!usuario) {
-        alert('Ingresá tu nombre');
-        return;
-      }
-      currentUsuario = usuario;
       cargarCasas(usuario);
     });
 
+    document.getElementById('toggleVisitadas').addEventListener('click', () => {
+      mostrarVisitadas = !mostrarVisitadas;
+      document.getElementById('toggleVisitadas').innerText =
+        mostrarVisitadas ? 'Ocultar visitadas' : 'Mostrar visitadas';
+      const usuario = document.getElementById('usuario').value.trim();
+      if (usuario) cargarCasas(usuario);
+    });
+
     socket.on('actualizacion', () => {
-      if (currentUsuario) cargarCasas(currentUsuario);
+      const usuario = document.getElementById('usuario').value.trim();
+      if (usuario) cargarCasas(usuario);
     });
   </script>
 </body>
