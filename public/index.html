@@ -3,117 +3,139 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Mis casas asignadas</title>
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <title>Casas asignadas</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" />
   <style>
-    #map { height: calc(100vh - 150px); }
+    #map { height: 90vh; }
+    .leaflet-popup-content input,
+    .leaflet-popup-content textarea,
+    .leaflet-popup-content select {
+      width: 100%;
+    }
   </style>
 </head>
-<body>
-  <div class="container py-3">
-    <h4>Ingrese su nombre:</h4>
-    <div class="input-group mb-3">
-      <input type="text" id="usuario" class="form-control" placeholder="Tu nombre" />
-      <button id="btnCargar" class="btn btn-primary">Cargar casas</button>
-      <button id="toggleVisitadas" class="btn btn-secondary">Ocultar visitadas</button>
+<body class="bg-light">
+  <div class="container-fluid p-3">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h4 class="mb-0">Casas asignadas</h4>
+      <button class="btn btn-outline-secondary btn-sm" id="toggleVisitadas">Ocultar visitadas</button>
     </div>
+    <div id="map"></div>
   </div>
-  <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   <script>
     const socket = io();
-    const map = L.map('map').setView([-31.2475, -64.4658], 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const urlParams = new URLSearchParams(window.location.search);
+    const usuario = urlParams.get("usuario");
 
-    let markers = [];
+    const estadoColores = {
+      visitada: "green",
+      no_atendieron: "orange",
+      otro: "gray",
+    };
+
+    const osm = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "© OpenStreetMap contributors"
+    });
+
+    const satelite = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      attribution: "© Esri",
+      maxZoom: 20
+    });
+
+    const mapa = L.map("map", {
+      center: [-31.2422, -64.4722],
+      zoom: 16,
+      layers: [osm]
+    });
+
+    L.control.layers({
+      "Mapa": osm,
+      "Satelital": satelite
+    }).addTo(mapa);
+
+    let marcadores = [];
     let mostrarVisitadas = true;
 
-    function getColorForEstado(estado) {
-      switch (estado) {
-        case 'visitada': return 'green';
-        case 'no_atendieron': return 'orange';
-        case 'otro': return 'gray';
-        default: return 'blue';
-      }
-    }
-
-    function clearMarkers() {
-      markers.forEach(m => map.removeLayer(m));
-      markers = [];
-    }
-
-    async function cargarCasas(usuario) {
-      if (!usuario) return alert('Ingresá tu nombre');
-      clearMarkers();
-      const res = await fetch(`/casas/${usuario}`);
-      const casas = await res.json();
+    function renderizarCasas(casas) {
+      marcadores.forEach(m => mapa.removeLayer(m));
+      marcadores = [];
 
       casas.forEach(casa => {
-        if (!mostrarVisitadas && casa.estado === 'visitada') return;
-        const color = getColorForEstado(casa.estado);
+        if (!mostrarVisitadas && casa.estado === "visitada") return;
+
+        const color = estadoColores[casa.estado] || "gray";
+
         const marker = L.circleMarker([casa.latitud, casa.longitud], {
           radius: 8,
-          color,
+          color: "black",
           fillColor: color,
-          fillOpacity: 0.8
-        }).addTo(map);
+          fillOpacity: 0.8,
+          weight: 1,
+        }).addTo(mapa);
 
-        marker.bindPopup(`
-          <b>${casa.direccion}</b><br>
-          Estado: ${casa.estado || 'sin estado'}<br><br>
-          <div class="btn-group btn-group-sm">
-            <button onclick="cambiarEstado(${casa.id}, 'visitada')" class="btn btn-success">Visitada</button>
-            <button onclick="cambiarEstado(${casa.id}, 'no_atendieron')" class="btn btn-warning">No atendieron</button>
-            <button onclick="cambiarEstado(${casa.id}, 'otro')" class="btn btn-secondary">Otro</button>
+        const popupContent = `
+          <div>
+            <b>${casa.direccion}</b><br>
+            <label class="form-label mt-1 mb-0">Estado:</label>
+            <select class="form-select form-select-sm estado-select" data-id="${casa.id}">
+              <option value="">--</option>
+              <option value="visitada" ${casa.estado === "visitada" ? "selected" : ""}>Visitada</option>
+              <option value="no_atendieron" ${casa.estado === "no_atendieron" ? "selected" : ""}>No atendieron</option>
+              <option value="otro" ${casa.estado === "otro" ? "selected" : ""}>Otro</option>
+            </select>
+            <label class="form-label mt-2 mb-0">Comentario:</label>
+            <textarea class="form-control form-control-sm comentario" data-id="${casa.id}">${casa.comentario || ""}</textarea>
           </div>
-          <br><br>
-          <textarea onchange="guardarComentario(${casa.id}, this.value)" placeholder="Comentario..." class="form-control mt-2">${casa.comentario || ''}</textarea>
-        `);
+        `;
 
-        markers.push(marker);
+        marker.bindPopup(popupContent);
+        marcadores.push(marker);
       });
+    }
 
-      if (casas.length) {
-        map.setView([casas[0].latitud, casas[0].longitud], 14);
+    async function cargarCasas() {
+      const res = await fetch(`/casas/${usuario}`);
+      const casas = await res.json();
+      renderizarCasas(casas);
+    }
+
+    socket.on("actualizacion", cargarCasas);
+
+    document.addEventListener("change", async (e) => {
+      if (e.target.classList.contains("estado-select")) {
+        const id = e.target.dataset.id;
+        const estado = e.target.value;
+        await fetch("/estado", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, estado })
+        });
       }
-    }
-
-    async function cambiarEstado(id, estado) {
-      await fetch('/estado', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, estado })
-      });
-    }
-
-    async function guardarComentario(id, comentario) {
-      await fetch('/comentario', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, comentario })
-      });
-    }
-
-    document.getElementById('btnCargar').addEventListener('click', () => {
-      const usuario = document.getElementById('usuario').value.trim();
-      cargarCasas(usuario);
     });
 
-    document.getElementById('toggleVisitadas').addEventListener('click', () => {
+    document.addEventListener("blur", async (e) => {
+      if (e.target.classList.contains("comentario")) {
+        const id = e.target.dataset.id;
+        const comentario = e.target.value;
+        await fetch("/comentario", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, comentario })
+        });
+      }
+    }, true);
+
+    document.getElementById("toggleVisitadas").addEventListener("click", () => {
       mostrarVisitadas = !mostrarVisitadas;
-      document.getElementById('toggleVisitadas').innerText =
-        mostrarVisitadas ? 'Ocultar visitadas' : 'Mostrar visitadas';
-      const usuario = document.getElementById('usuario').value.trim();
-      if (usuario) cargarCasas(usuario);
+      document.getElementById("toggleVisitadas").textContent = mostrarVisitadas ? "Ocultar visitadas" : "Mostrar visitadas";
+      cargarCasas();
     });
 
-    socket.on('actualizacion', () => {
-      const usuario = document.getElementById('usuario').value.trim();
-      if (usuario) cargarCasas(usuario);
-    });
+    cargarCasas();
   </script>
 </body>
 </html>
