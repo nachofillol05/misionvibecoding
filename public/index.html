@@ -8,12 +8,8 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <style>
     #map { height: 75vh; }
-    body {
-      padding: 10px;
-    }
-    .top-bar {
-      margin-bottom: 10px;
-    }
+    body { padding: 10px; }
+    .top-bar { margin-bottom: 10px; }
   </style>
 </head>
 <body>
@@ -60,6 +56,7 @@
     let capaSateliteActiva = false;
     let usuarioActual = null;
     let mostrarVisitadas = true;
+    let marcadores = [];
 
     document.getElementById('btnToggleSatelite').addEventListener('click', () => {
       if(capaSateliteActiva) {
@@ -87,45 +84,52 @@
       cargarCasas(user);
     });
 
-    let marcadores = [];
-
     function filtrarVisitadas(casas) {
-      if (mostrarVisitadas) return casas;
-      return casas.filter(c => c.estado !== 'visitada');
+      return mostrarVisitadas ? casas : casas.filter(c => c.estado !== 'visitada');
     }
 
     async function cargarCasas(usuario) {
-      const res = await fetch(`/casas?usuario=${encodeURIComponent(usuario)}`);
-      if (res.status === 404) {
-        alert('No se encontraron casas asignadas para este usuario.');
-        return;
+      try {
+        const res = await fetch(`/casas`);
+        const todas = await res.json();
+
+        const asignadas = todas.filter(c => c.asignado_a && c.asignado_a.toLowerCase() === usuario.toLowerCase());
+        const casasFiltradas = filtrarVisitadas(asignadas);
+
+        marcadores.forEach(m => mapa.removeLayer(m));
+        marcadores = [];
+
+        casasFiltradas.forEach(casa => {
+          const color = estadoColores[casa.estado] || 'gray';
+
+          const marker = L.circleMarker([casa.latitud, casa.longitud], {
+            radius: 8,
+            color: 'blue',
+            fillColor: color,
+            fillOpacity: 0.8,
+            weight: 2,
+            casaId: casa.id
+          }).addTo(mapa);
+
+          let popupContent = `
+            <b>${casa.direccion}</b><br>
+            Estado: ${casa.estado || '(sin estado)'}<br>
+            Comentario: ${casa.comentario || ''}
+            <br><button onclick="editarEstado(${casa.id})" class="btn btn-sm btn-primary mt-2">Editar estado/comentario</button>
+          `;
+
+          marker.bindPopup(popupContent);
+          marcadores.push(marker);
+        });
+
+        if (casasFiltradas.length === 0) {
+          alert("No hay casas asignadas o visibles para este usuario.");
+        }
+
+      } catch (error) {
+        alert('Error al cargar casas');
+        console.error(error);
       }
-      const casas = await res.json();
-
-      marcadores.forEach(m => mapa.removeLayer(m));
-      marcadores = [];
-
-      const casasFiltradas = filtrarVisitadas(casas);
-
-      casasFiltradas.forEach(casa => {
-        const color = estadoColores[casa.estado] || 'gray';
-
-        const marker = L.circleMarker([casa.latitud, casa.longitud], {
-          radius: 8,
-          color: 'blue',
-          fillColor: color,
-          fillOpacity: 0.8,
-          weight: 2,
-          casaId: casa.id
-        }).addTo(mapa);
-
-        let popupContent = `<b>${casa.direccion}</b><br>Estado: ${casa.estado || '(sin estado)'}<br>Comentario: ${casa.comentario || ''}`;
-        popupContent += `<br><button onclick="editarEstado(${casa.id})" class="btn btn-sm btn-primary mt-2">Editar estado/comentario</button>`;
-
-        marker.bindPopup(popupContent);
-
-        marcadores.push(marker);
-      });
     }
 
     function editarEstado(id) {
