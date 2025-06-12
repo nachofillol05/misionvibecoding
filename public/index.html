@@ -2,116 +2,125 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Usuario - Casas asignadas</title>
+  <title>Mapa del Usuario</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
   <style>
-    #map { height: 90vh; }
-    .panel { padding: 10px; text-align: center; }
-    .panel input, .panel button { margin: 5px; }
+    #map { height: 85vh; margin-top: 10px; }
+    .panel { padding: 10px; background: #f8f9fa; }
+    .leaflet-popup-content { font-size: 14px; }
   </style>
 </head>
 <body>
-  <div class="panel">
-    <input type="text" id="usuario" class="form-control d-inline w-auto" placeholder="Tu nombre de usuario">
-    <button class="btn btn-primary" id="btnCargar">Ver mis casas</button>
-    <button class="btn btn-secondary" id="btnToggleVisitadas">Ocultar visitadas</button>
+  <div class="container-fluid">
+    <div class="panel row align-items-center">
+      <div class="col-md-4">
+        <input type="text" id="usuario" class="form-control" placeholder="Tu nombre de usuario" />
+      </div>
+      <div class="col-md-4">
+        <button class="btn btn-primary" onclick="cargarCasas()">Cargar Mis Casas</button>
+        <button class="btn btn-outline-secondary ms-2" onclick="toggleVisitadas()">Ocultar/Mostrar visitadas</button>
+      </div>
+    </div>
+    <div id="map"></div>
   </div>
-  <div id="map"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
-  <script src="/socket.io/socket.io.js"></script>
   <script>
-    const estadoColores = { visitada: 'green', no_atendieron: 'orange', otro: 'gray' };
-    let usuarioActual = '';
-    let ocultarVisitadas = false;
     let mapa = L.map('map', {
-      center: [-31.2422, -64.4722],
-      zoom: 15,
-      maxZoom: 19
+      zoomControl: true,
+      maxZoom: 20
+    }).setView([-31.2422, -64.4722], 16);
+
+    // Base de calles y satélite
+    const calle = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap'
     });
 
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(mapa);
-    const sat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-      subdomains: ['mt0', 'mt1', 'mt2'],
-      attribution: 'Google Satellite',
-      maxZoom: 19
+    const satelite = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+      maxZoom: 20,
+      subdomains: ['mt0','mt1','mt2','mt3']
     });
 
-    L.control.layers({ "OSM": osm, "Satélite": sat }).addTo(mapa);
+    const baseMaps = {
+      "Calle": calle,
+      "Satélite": satelite
+    };
+
+    calle.addTo(mapa);
+    L.control.layers(baseMaps).addTo(mapa);
 
     let marcadores = [];
+    let mostrarVisitadas = true;
+
+    const estadoColores = {
+      visitada: 'green',
+      no_atendieron: 'orange',
+      otro: 'gray'
+    };
+
+    function toggleVisitadas() {
+      mostrarVisitadas = !mostrarVisitadas;
+      cargarCasas();
+    }
 
     async function cargarCasas() {
-      if (!usuarioActual) return;
-      const res = await fetch(`/casas/${usuarioActual}`);
+      const usuario = document.getElementById('usuario').value.trim();
+      if (!usuario) return alert('Ingresá tu nombre de usuario.');
+
+      const res = await fetch('/casas');
       const casas = await res.json();
 
       marcadores.forEach(m => mapa.removeLayer(m));
       marcadores = [];
 
-      casas.forEach(casa => {
-        if (ocultarVisitadas && casa.estado === 'visitada') return;
+      casas
+        .filter(c => c.asignado_a === usuario && (mostrarVisitadas || c.estado !== 'visitada'))
+        .forEach(casa => {
+          const color = estadoColores[casa.estado] || 'gray';
 
-        const marker = L.circleMarker([casa.latitud, casa.longitud], {
-          radius: 8,
-          color: 'blue',
-          fillColor: estadoColores[casa.estado] || 'gray',
-          fillOpacity: 0.8
-        }).addTo(mapa);
+          const marker = L.circleMarker([casa.latitud, casa.longitud], {
+            radius: 8,
+            color: 'black',
+            fillColor: color,
+            fillOpacity: 0.8
+          }).addTo(mapa);
 
-        const form = document.createElement('form');
-        form.innerHTML = `
-          <strong>${casa.direccion}</strong><br>
-          <select class="form-select form-select-sm mt-1 estado">
-            <option value="">(sin estado)</option>
-            <option value="visitada">Visitada</option>
-            <option value="no_atendieron">No atendieron</option>
-            <option value="otro">Otro</option>
-          </select>
-          <textarea class="form-control mt-1 comentario" rows="2" placeholder="Comentario...">${casa.comentario || ''}</textarea>
-          <button type="submit" class="btn btn-primary btn-sm mt-1">Guardar</button>
-        `;
+          const popup = document.createElement('div');
+          popup.innerHTML = `
+            <b>${casa.direccion}</b><br>
+            Estado: <select class="form-select form-select-sm mt-1 estado-select">
+              <option value="">(ninguno)</option>
+              <option value="visitada">visitada</option>
+              <option value="no_atendieron">no_atendieron</option>
+              <option value="otro">otro</option>
+            </select>
+            <textarea class="form-control mt-2 comentario" rows="2" placeholder="Comentario...">${casa.comentario || ''}</textarea>
+            <button class="btn btn-sm btn-success mt-2 guardar">Guardar</button>
+          `;
 
-        form.querySelector('.estado').value = casa.estado || '';
+          const select = popup.querySelector('.estado-select');
+          const textarea = popup.querySelector('.comentario');
+          select.value = casa.estado || '';
 
-        form.onsubmit = async e => {
-          e.preventDefault();
-          const estado = form.querySelector('.estado').value;
-          const comentario = form.querySelector('.comentario').value;
+          popup.querySelector('.guardar').onclick = async () => {
+            const estado = select.value;
+            const comentario = textarea.value;
 
-          await fetch('/estado', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: casa.id, estado })
-          });
-          await fetch('/comentario', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id: casa.id, comentario })
-          });
+            await fetch('/actualizar_estado', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: casa.id, estado, comentario })
+            });
 
-          cargarCasas();
-        };
+            alert('Guardado');
+            cargarCasas();
+          };
 
-        marker.bindPopup(form);
-        marcadores.push(marker);
-      });
+          marker.bindPopup(popup);
+          marcadores.push(marker);
+        });
     }
-
-    document.getElementById('btnCargar').addEventListener('click', () => {
-      usuarioActual = document.getElementById('usuario').value.trim();
-      if (usuarioActual) cargarCasas();
-    });
-
-    document.getElementById('btnToggleVisitadas').addEventListener('click', () => {
-      ocultarVisitadas = !ocultarVisitadas;
-      document.getElementById('btnToggleVisitadas').innerText = ocultarVisitadas ? 'Mostrar visitadas' : 'Ocultar visitadas';
-      cargarCasas();
-    });
-
-    const socket = io();
-    socket.on('actualizacion', cargarCasas);
   </script>
 </body>
 </html>
