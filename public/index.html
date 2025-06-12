@@ -36,10 +36,8 @@
 <body>
   <div class="container-fluid">
     <div class="row top-bar align-items-center">
-      <div class="col-sm-5">
+      <div class="col-sm-7 d-flex justify-content center flex-wrap gap-2">
         <input type="text" id="usuario" class="form-control" placeholder="Ingresá tu usuario" />
-      </div>
-      <div class="col-sm-7 d-flex justify-content-end flex-wrap gap-2">
         <button id="btnCargar" class="btn btn-primary">Cargar casas</button>
         <button id="btnToggleVisitadas" class="btn btn-outline-secondary">Ocultar visitadas</button>
         <button id="btnToggleSatelite" class="btn btn-outline-secondary">Mapa Satelital</button>
@@ -63,10 +61,6 @@
             <button class="estado-btn btn-otro" data-estado="otro">Otro</button>
           </div>
           <textarea id="comentario" class="form-control" placeholder="Comentario..."></textarea>
-        </div>
-        <div class="modal-footer">
-          <button id="guardarCambios" class="btn btn-success">Guardar</button>
-          <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
         </div>
       </div>
     </div>
