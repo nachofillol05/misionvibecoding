@@ -8,6 +8,16 @@
   <style>
     .filtro { margin-bottom: 15px; }
     table { font-size: 14px; }
+    .icon-btn {
+      background: none;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      color: #0d6efd;
+    }
+    .icon-btn:hover {
+      color: #084298;
+    }
   </style>
 </head>
 <body class="container mt-4">
@@ -28,11 +38,12 @@
     <table class="table table-bordered table-sm" id="tablaExportable">
       <thead class="table-light">
         <tr>
+          <th>📍</th>
           <th>Dirección</th>
           <th>Estado</th>
           <th>Comentario</th>
           <th>Asignado a</th>
-          <th>Ver en mapa</th>
+          <th>Coordenadas</th>
         </tr>
       </thead>
       <tbody id="tablaComentarios"></tbody>
@@ -40,19 +51,15 @@
   </div>
 
   <script>
-    let datosCasas = [];
-
     async function cargarDatos() {
       const res = await fetch('/casas');
       const casas = await res.json();
-      datosCasas = casas;
 
       const resumen = {};
       let totalVisitadas = 0;
 
       casas.forEach(casa => {
         if (casa.estado === 'visitada') totalVisitadas++;
-
         if (casa.asignado_a) {
           if (!resumen[casa.asignado_a]) resumen[casa.asignado_a] = { visitadas: 0, asignadas: 0 };
           resumen[casa.asignado_a].asignadas++;
@@ -68,14 +75,25 @@
 
       const tbody = document.getElementById('tablaComentarios');
       tbody.innerHTML = '';
+
       casas.forEach(casa => {
         const fila = document.createElement('tr');
+        const lat = casa.latitud;
+        const lon = casa.longitud;
+        const coords = `${lat}, ${lon}`;
         fila.innerHTML = `
+          <td>
+            <button class="icon-btn" onclick="verEnMapa(${lat}, ${lon})" title="Ver en mapa">
+              📍
+            </button>
+          </td>
           <td>${casa.direccion || ''}</td>
           <td>${casa.estado || ''}</td>
           <td>${casa.comentario || ''}</td>
           <td>${casa.asignado_a || ''}</td>
-          <td><button class="btn btn-sm btn-outline-primary" onclick="verEnMapa(${casa.latitud}, ${casa.longitud})">Ver en mapa</button></td>
+          <td>
+            <button class="btn btn-sm btn-outline-secondary" onclick="copiarCoords('${coords}')">${coords}</button>
+          </td>
         `;
         tbody.appendChild(fila);
       });
@@ -97,6 +115,12 @@
 
     function verEnMapa(lat, lon) {
       window.open(`mapa_casa.html?lat=${lat}&lon=${lon}`, '_blank');
+    }
+
+    function copiarCoords(coords) {
+      navigator.clipboard.writeText(coords).then(() => {
+        alert("Coordenadas copiadas: " + coords);
+      });
     }
 
     cargarDatos();
