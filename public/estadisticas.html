@@ -32,6 +32,7 @@
           <th>Estado</th>
           <th>Comentario</th>
           <th>Asignado a</th>
+          <th>Ver en mapa</th>
         </tr>
       </thead>
       <tbody id="tablaComentarios"></tbody>
@@ -74,6 +75,7 @@
           <td>${casa.estado || ''}</td>
           <td>${casa.comentario || ''}</td>
           <td>${casa.asignado_a || ''}</td>
+          <td><button class="btn btn-sm btn-outline-primary" onclick="verEnMapa(${casa.latitud}, ${casa.longitud})">Ver en mapa</button></td>
         `;
         tbody.appendChild(fila);
       });
@@ -91,6 +93,10 @@
       const tabla = document.getElementById('tablaExportable');
       const wb = XLSX.utils.table_to_book(tabla, { sheet: "Estadísticas" });
       XLSX.writeFile(wb, 'estadisticas.xlsx');
+    }
+
+    function verEnMapa(lat, lon) {
+      window.open(`mapa_casa.html?lat=${lat}&lon=${lon}`, '_blank');
     }
 
     cargarDatos();
