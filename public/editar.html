@@ -9,11 +9,19 @@
   <style>
     #map { height: 80vh; }
     body { padding: 10px; }
-    .panel {
-      margin-bottom: 10px;
+    .panel { margin-bottom: 10px; }
+    .panel .btn { margin-right: 5px; }
+
+    .toast-container {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      z-index: 1055;
     }
-    .panel .btn {
-      margin-right: 5px;
+
+    .toast {
+      opacity: 0.95;
+      min-width: 200px;
     }
   </style>
 </head>
@@ -30,6 +38,9 @@
     </div>
     <div id="map"></div>
   </div>
+
+  <!-- Notificaciones -->
+  <div class="toast-container" id="toastContainer"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script>
@@ -116,9 +127,7 @@
 
         marker.on('click', e => {
           if (modo === 'eliminar') {
-            if (confirm(`¿Eliminar casa ${casa.direccion}?`)) {
-              eliminarCasa(casa.id);
-            }
+            eliminarCasa(casa.id);
           }
         });
 
@@ -127,8 +136,7 @@
     }
 
     async function agregarCasa(latlng) {
-      const direccion = prompt("Ingrese dirección o identificador:");
-      if (!direccion) return;
+      const direccion = `Manual-${Date.now()}`;
 
       const res = await fetch('/agregar', {
         method: 'POST',
@@ -141,10 +149,10 @@
       });
 
       if (res.ok) {
-        alert('Casa agregada');
+        mostrarToast('Casa agregada');
         cargarCasas();
       } else {
-        alert('Error al agregar');
+        alert('Error al agregar casa');
       }
     }
 
@@ -156,11 +164,25 @@
       });
 
       if (res.ok) {
-        alert('Casa eliminada');
+        mostrarToast('Casa eliminada');
         cargarCasas();
       } else {
-        alert('Error al eliminar');
+        alert('Error al eliminar casa');
       }
+    }
+
+    function mostrarToast(mensaje) {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = 'toast align-items-center text-bg-dark border-0 show';
+      toast.setAttribute('role', 'alert');
+      toast.innerHTML = `
+        <div class="d-flex">
+          <div class="toast-body">${mensaje}</div>
+        </div>
+      `;
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 3000);
     }
 
     cargarCasas();
