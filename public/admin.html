@@ -27,6 +27,7 @@
     <button id="btnToggleVisitadas" class="btn btn-secondary">Ocultar visitadas</button>
     <button id="btnVerEstadisticas" class="btn btn-info">Ver estadísticas</button>
     <button id="btnToggleSatelite" class="btn btn-outline-secondary">Mapa Satelital</button>
+    <button id="btnModoEdicion" class="btn btn-outline-secondary">Modo edición</button>
   </div>
   <div id="map" class="container-fluid px-0"></div>
 
@@ -191,6 +192,10 @@ document.getElementById('btnToggleSatelite').addEventListener('click', () => {
 
     document.getElementById('btnVerEstadisticas').addEventListener('click', () => {
       window.location.href = '/estadisticas.html';
+    });
+
+    document.getElementById('btnModoEdicion').addEventListener('click', () => {
+      window.location.href = '/editar.html';
     });
 
     cargarCasas();

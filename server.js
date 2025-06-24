@@ -6,39 +6,20 @@ const pool = require('./db'); // tu pool pg o conexión a DB
 app.use(express.json());
 app.use(express.static('public')); // sirviendo archivos públicos
 
-// Endpoint para casas (admin): retorna todas
+// VOLVER AL ANTEERIOR SI NO SANDSAAAAAAAA 
 app.get('/casas', async (req, res) => {
+  const usuario = req.query.usuario;
   try {
-    const result = await pool.query('SELECT * FROM casas');
-    res.json(result.rows);
+    if (usuario) {
+      const result = await pool.query('SELECT * FROM casas WHERE asignado_a = $1', [usuario]);
+      return res.json(result.rows);
+    } else {
+      const result = await pool.query('SELECT * FROM casas');
+      return res.json(result.rows);
+    }
   } catch (e) {
     console.error(e);
     res.status(500).send('Error al obtener casas');
-  }
-});
-
-// Endpoint para casas (usuario) filtrado por usuario asignado
-app.get('/casas', async (req, res) => {
-  const usuario = req.query.usuario;
-  if (!usuario) {
-    try {
-      const result = await pool.query('SELECT * FROM casas');
-      res.json(result.rows);
-    } catch (e) {
-      console.error(e);
-      res.status(500).send('Error al obtener casas');
-    }
-  } else {
-    try {
-      const result = await pool.query('SELECT * FROM casas WHERE asignado_a = $1', [usuario]);
-      if (result.rows.length === 0) {
-        return res.status(404).send('No hay casas asignadas');
-      }
-      res.json(result.rows);
-    } catch (e) {
-      console.error(e);
-      res.status(500).send('Error al obtener casas para usuario');
-    }
   }
 });
 
@@ -123,6 +104,34 @@ app.get('/stats', async (req, res) => {
     res.status(500).send('Error al obtener estadísticas');
   }
 });
+
+app.post('/agregar', async (req, res) => {
+  const { direccion, latitud, longitud } = req.body;
+  if (!direccion || !latitud || !longitud) {
+    return res.status(400).send('Faltan datos');
+  }
+  try {
+    const q = 'INSERT INTO casas (direccion, latitud, longitud) VALUES ($1, $2, $3)';
+    await pool.query(q, [direccion, latitud, longitud]);
+    res.sendStatus(200);
+  } catch (e) {
+    console.error(e);
+    res.status(500).send('Error al agregar casa');
+  }
+});
+
+app.post('/eliminar', async (req, res) => {
+  const { id } = req.body;
+  if (!id) return res.status(400).send('Falta ID');
+  try {
+    await pool.query('DELETE FROM casas WHERE id = $1', [id]);
+    res.sendStatus(200);
+  } catch (e) {
+    console.error(e);
+    res.status(500).send('Error al eliminar casa');
+  }
+});
+
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => console.log(`Servidor corriendo en puerto ${port}`));
