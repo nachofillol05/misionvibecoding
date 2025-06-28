@@ -11,14 +11,14 @@
     #map { height: 80vh; width: 100%; }
     .panel { padding: 10px; text-align: center; margin-bottom: 10px; }
     .panel > * { margin: 5px; }
+
     .leaflet-tooltip.usuario-label {
       background-color: rgba(255,255,255,0.8);
       border: 1px solid #ccc;
       padding: 2px 6px;
       font-size: 12px;
       border-radius: 4px;
-      pointer-events: none;
-      transition: opacity 0.2s ease;
+      font-weight: bold;
     }
   </style>
 </head>
@@ -33,6 +33,7 @@
     <button id="btnModoEdicion" class="btn btn-outline-secondary">Modo edición</button>
     <input type="text" id="filtroUsuario" class="form-control" placeholder="Filtrar por usuario" style="max-width: 200px;" />
   </div>
+
   <div id="map" class="container-fluid px-0"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
@@ -232,15 +233,6 @@
         .addTo(mapa);
         tooltips.push(tooltip);
       }
-
-      mapa.getContainer().addEventListener('pointermove', ocultarTooltips);
-    }
-
-    function ocultarTooltips() {
-      document.querySelectorAll('.usuario-label').forEach(label => {
-        label.style.opacity = '0';
-        setTimeout(() => label.style.opacity = '1', 1000);
-      });
     }
 
     cargarCasas();
