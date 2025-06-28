@@ -13,21 +13,22 @@
     .panel > * { margin: 5px; }
     .user-label {
       position: absolute;
-      background: rgba(255,255,255,0.7);
+      background: rgba(255,255,255,0.9);
+      border: 1px solid #ccc;
       padding: 2px 6px;
-      border-radius: 4px;
       font-size: 12px;
-      pointer-events: none;
+      border-radius: 4px;
       transition: opacity 0.3s;
+      pointer-events: none;
+    }
+    .user-label:hover {
+      opacity: 0;
     }
   </style>
 </head>
 <body>
   <div class="panel container d-flex justify-content-center flex-wrap gap-2">
-    <input list="usuariosList" id="usuarioFilter" class="form-control" placeholder="Filtrar por usuario" style="max-width: 200px;" />
-    <datalist id="usuariosList"></datalist>
-    <button id="btnClearFilter" class="btn btn-outline-secondary">Quitar filtro</button>
-    <input type="text" id="usuarioAsignar" class="form-control" placeholder="Usuario a asignar" style="max-width: 200px;" />
+    <input type="text" id="usuarioAsignar" class="form-control" placeholder="Usuario a asignar" style="max-width: 250px;" />
     <button id="btnAsignar" class="btn btn-primary">Asignar</button>
     <button id="btnDesasignar" class="btn btn-warning">Desasignar seleccionadas</button>
     <button id="btnToggleVisitadas" class="btn btn-secondary">Ocultar visitadas</button>
@@ -36,117 +37,236 @@
     <button id="btnModoEdicion" class="btn btn-outline-secondary">Modo edición</button>
   </div>
   <div id="map" class="container-fluid px-0"></div>
+  <div id="labelsContainer" style="position: absolute; top: 0; left: 0; z-index: 1000;"></div>
 
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
   <script>
-    // utils
-    function hashColor(str) {
-      let hash = 0;
-      for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-      const c = (hash & 0x00FFFFFF).toString(16).toUpperCase();
-      return "#" + "00000".substring(0, 6 - c.length) + c;
+    const estadoColores = {
+      visitada: 'green',
+      no_atendieron: 'orange',
+      otro: 'gray'
+    };
+
+    const userColors = {};
+    function getColorForUser(user) {
+      if (!userColors[user]) {
+        const hash = [...user].reduce((acc, c) => acc + c.charCodeAt(0), 0);
+        const hue = hash % 360;
+        userColors[user] = `hsl(${hue}, 100%, 40%)`;
+      }
+      return userColors[user];
     }
 
-    const estadoColores = { visitada: 'green', no_atendieron: 'orange', otro: 'gray' };
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18,attribution:'© OpenStreetMap'});
-    const sat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{maxZoom:18,subdomains:['mt0','mt1','mt2','mt3'],attribution:'© Google Satellite'});
-    const map = L.map('map',{center:[-31.2422,-64.4722],zoom:15,maxZoom:18,layers:[osm]});
-    let satAct = false, markers = [], selected = new Set(), showVisited = true;
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18, attribution: '© OpenStreetMap contributors'
+    });
 
-    // label container
-    const labelContainer = document.createElement('div');
-    labelContainer.style.position = 'absolute';
-    labelContainer.style.top = 0;
-    labelContainer.style.left = 0;
-    labelContainer.style.width = '100%';
-    labelContainer.style.height = '100%';
-    labelContainer.style.pointerEvents = 'none';
-    document.body.appendChild(labelContainer);
+    const satelite = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+      maxZoom: 18, subdomains:['mt0','mt1','mt2','mt3'], attribution: '© Google'
+    });
 
-    // controls
-    document.getElementById('btnToggleSatelite').onclick = () => {
-      satAct = !satAct;
-      satAct ? map.addLayer(sat) : map.removeLayer(sat);
-      satAct ? this.innerText = 'Mapa Normal' : this.innerText = 'Mapa Satelital';
-    };
-    document.getElementById('btnToggleVisitadas').onclick = () => { showVisited = !showVisited; this.innerText = showVisited ? 'Ocultar visitadas' : 'Mostrar visitadas'; load(); };
-    document.getElementById('btnVerEstadisticas').onclick = () => location.href = '/estadisticas.html';
-    document.getElementById('btnModoEdicion').onclick = () => location.href = '/editar.html';
-    document.getElementById('btnClearFilter').onclick = () => { document.getElementById('usuarioFilter').value = ''; load(); };
-    document.getElementById('usuarioFilter').oninput = () => load();
+    const mapa = L.map('map', {
+      center: [-31.2422, -64.4722],
+      zoom: 15,
+      maxZoom: 18,
+      layers: [osm]
+    });
+
+    let capaSateliteActiva = false;
+    let marcadores = [];
+    let seleccionadas = new Set();
+    let mostrarVisitadas = true;
 
     const drawnItems = new L.FeatureGroup();
-    map.addLayer(drawnItems);
-    map.addControl(new L.Control.Draw({draw:{rectangle:true,polygon:true},edit:{featureGroup:drawnItems,edit:false,remove:false}}));
-    map.on('draw:created', e => {
-      drawnItems.clearLayers(); drawnItems.addLayer(e.layer);
-      selected.clear();
-      markers.forEach(m => {
-        const inBounds = e.layer.getBounds().contains(m.getLatLng());
-        if(inBounds) { selected.add(m.options.casaId); m.setStyle({ weight:4, color: m.options.userColor }); }
-        else m.setStyle({ weight: m.options.asignado?2:1, color: m.options.userColor });
+    mapa.addLayer(drawnItems);
+
+    const labelsContainer = document.getElementById('labelsContainer');
+    const labels = [];
+
+    document.getElementById('btnToggleSatelite').addEventListener('click', () => {
+      if (capaSateliteActiva) {
+        mapa.removeLayer(satelite);
+        mapa.addLayer(osm);
+        document.getElementById('btnToggleSatelite').innerText = "Mapa Satelital";
+      } else {
+        mapa.removeLayer(osm);
+        mapa.addLayer(satelite);
+        document.getElementById('btnToggleSatelite').innerText = "Mapa Normal";
+      }
+      capaSateliteActiva = !capaSateliteActiva;
+    });
+
+    const drawControl = new L.Control.Draw({
+      draw: {
+        rectangle: true,
+        polygon: true,
+        circle: false,
+        marker: false,
+        circlemarker: false,
+        polyline: false
+      },
+      edit: { featureGroup: drawnItems, edit: false, remove: false }
+    });
+    mapa.addControl(drawControl);
+
+    mapa.on('draw:created', function (e) {
+      const layer = e.layer;
+      drawnItems.clearLayers();
+      drawnItems.addLayer(layer);
+      seleccionadas.clear();
+
+      marcadores.forEach(marker => {
+        const dentro = layer.getBounds().contains(marker.getLatLng());
+        if (dentro) {
+          seleccionadas.add(marker.options.casaId);
+          marker.setStyle({ weight: 4 });
+        } else {
+          marker.setStyle({ weight: marker.options.asignado ? 2 : 1 });
+        }
       });
     });
 
-    document.getElementById('btnAsignar').onclick = async () => {
-      const usu = document.getElementById('usuarioAsignar').value.trim();
-      if(!usu || selected.size===0) return alert('Faltan datos');
-      await fetch('/asignar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario:usu,ids:[...selected]})});
-      selected.clear(); load();
-    };
+    function filtrarVisitadas(casas) {
+      return mostrarVisitadas ? casas : casas.filter(c => c.estado !== 'visitada');
+    }
 
-    document.getElementById('btnDesasignar').onclick = async () => {
-      if(selected.size===0) return alert('Nada seleccionado');
-      if(!confirm('Desasignar?')) return;
-      await fetch('/desasignar',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:[...selected]})});
-      selected.clear(); load();
-    };
+    function mostrarLabels(casas) {
+      labels.forEach(label => label.remove());
+      labels.length = 0;
 
-    // load function
-    async function load(){
-      const usuFilter = document.getElementById('usuarioFilter').value.trim().toLowerCase();
-      const res = await fetch('/casas');
-      const casas = await res.json();
-      markers.forEach(m=>map.removeLayer(m)); markers=[];
-      labelContainer.innerHTML = '';
-
-      // build datalist
-      const users = [...new Set(casas.filter(c=>c.asignado_a).map(c=>c.asignado_a))];
-      const ddl = document.getElementById('usuariosList');
-      ddl.innerHTML = users.map(u=>`<option value="${u}">`).join('');
-
-      const grouped = {};
-      casas.filter(c=> showVisited || c.estado!='visitada').filter(c=> !usuFilter || c.asignado_a?.toLowerCase()===usuFilter).forEach(c=>{
-        const uc = hashColor(c.asignado_a || '');
-        const mk = L.circleMarker([c.latitud,c.longitud],{radius:8,fillColor:estadoColores[c.estado]||'gray',color:c.asignado_a?uc:'black',fillOpacity:0.8,weight:c.asignado_a?2:1}).addTo(map);
-        mk.bindPopup(`<b>${c.direccion}</b><br>Asignado: ${c.asignado_a||'nadie'}`);
-        mk.options = { casaId:c.id, asignado:!!c.asignado_a, userColor:mk.options.color };
-        markers.push(mk);
-        if(c.asignado_a){
-          grouped[c.asignado_a] = grouped[c.asignado_a] || [];
-          grouped[c.asignado_a].push(mk);
-        }
+      const porUsuario = {};
+      casas.forEach(c => {
+        if (!c.asignado_a) return;
+        if (!porUsuario[c.asignado_a]) porUsuario[c.asignado_a] = [];
+        porUsuario[c.asignado_a].push([c.latitud, c.longitud]);
       });
 
-      // add labels
-      for(const usr in grouped){
-        const list = grouped[usr];
-        const latSum = list.reduce((s,m)=>s+m.getLatLng().lat,0)/list.length;
-        const lngSum = list.reduce((s,m)=>s+m.getLatLng().lng,0)/list.length;
-        const point = map.latLngToContainerPoint([latSum,lngSum]);
+      for (const usuario in porUsuario) {
+        const coords = porUsuario[usuario];
+        const avgLat = coords.reduce((s, c) => s + c[0], 0) / coords.length;
+        const avgLng = coords.reduce((s, c) => s + c[1], 0) / coords.length;
+        const punto = mapa.latLngToContainerPoint([avgLat, avgLng]);
+
         const div = document.createElement('div');
-        div.className='user-label';
-        div.style.left = point.x+'px'; div.style.top = point.y+'px';
-        div.style.border = `1px solid ${hashColor(usr)}`;
-        div.innerText = usr;
-        div.onmouseenter = ()=> div.style.opacity='0';
-        div.onmouseleave = ()=> div.style.opacity='1';
-        labelContainer.appendChild(div);
+        div.className = 'user-label';
+        div.innerText = usuario;
+        div.style.left = `${punto.x}px`;
+        div.style.top = `${punto.y}px`;
+
+        labelsContainer.appendChild(div);
+        labels.push(div);
       }
     }
 
-    load();
+    mapa.on('move', () => {
+      // Reposicionar las etiquetas
+      labels.forEach((div, i) => {
+        const usuario = div.innerText;
+        const coords = marcadores
+          .filter(m => m.options.asignado_a === usuario)
+          .map(m => m.getLatLng());
+        if (coords.length > 0) {
+          const avgLat = coords.reduce((s, c) => s + c.lat, 0) / coords.length;
+          const avgLng = coords.reduce((s, c) => s + c.lng, 0) / coords.length;
+          const punto = mapa.latLngToContainerPoint([avgLat, avgLng]);
+          div.style.left = `${punto.x}px`;
+          div.style.top = `${punto.y}px`;
+        }
+      });
+    });
+
+    async function cargarCasas() {
+      const res = await fetch('/casas');
+      const casas = await res.json();
+
+      marcadores.forEach(m => mapa.removeLayer(m));
+      marcadores = [];
+
+      labels.forEach(l => l.remove());
+      labels.length = 0;
+
+      const casasFiltradas = filtrarVisitadas(casas);
+
+      casasFiltradas.forEach(casa => {
+        const color = estadoColores[casa.estado] || 'gray';
+        const border = casa.asignado_a ? getColorForUser(casa.asignado_a) : 'black';
+
+        const marker = L.circleMarker([casa.latitud, casa.longitud], {
+          radius: 8,
+          color: border,
+          fillColor: color,
+          fillOpacity: 0.8,
+          weight: casa.asignado_a ? 2 : 1,
+          casaId: casa.id,
+          asignado: !!casa.asignado_a,
+          asignado_a: casa.asignado_a || null
+        }).addTo(mapa);
+
+        marker.bindPopup(`
+          <b>${casa.direccion}</b><br>
+          Estado: ${casa.estado || '(sin estado)'}<br>
+          Asignado a: ${casa.asignado_a || 'nadie'}
+        `);
+
+        marcadores.push(marker);
+      });
+
+      mostrarLabels(casasFiltradas);
+    }
+
+    document.getElementById('btnAsignar').addEventListener('click', async () => {
+      const usuario = document.getElementById('usuarioAsignar').value.trim();
+      if (!usuario || seleccionadas.size === 0) return alert('Faltan datos o casas seleccionadas');
+
+      const res = await fetch('/asignar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usuario, ids: [...seleccionadas] })
+      });
+
+      if (res.ok) {
+        seleccionadas.clear();
+        cargarCasas();
+      } else {
+        alert('Error al asignar');
+      }
+    });
+
+    document.getElementById('btnDesasignar').addEventListener('click', async () => {
+      if (seleccionadas.size === 0) return alert('No hay casas seleccionadas');
+
+      if (!confirm('¿Seguro que querés desasignar y borrar estado y comentario?')) return;
+
+      const res = await fetch('/desasignar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...seleccionadas] })
+      });
+
+      if (res.ok) {
+        seleccionadas.clear();
+        cargarCasas();
+      } else {
+        alert('Error al desasignar');
+      }
+    });
+
+    document.getElementById('btnToggleVisitadas').addEventListener('click', () => {
+      mostrarVisitadas = !mostrarVisitadas;
+      document.getElementById('btnToggleVisitadas').innerText = mostrarVisitadas ? 'Ocultar visitadas' : 'Mostrar visitadas';
+      cargarCasas();
+    });
+
+    document.getElementById('btnVerEstadisticas').addEventListener('click', () => {
+      window.location.href = '/estadisticas.html';
+    });
+
+    document.getElementById('btnModoEdicion').addEventListener('click', () => {
+      window.location.href = '/editar.html';
+    });
+
+    cargarCasas();
   </script>
 </body>
 </html>
