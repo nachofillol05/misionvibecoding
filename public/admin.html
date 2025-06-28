@@ -9,36 +9,29 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
   <style>
     #map { height: 80vh; width: 100%; }
-    .panel {
-      padding: 10px;
-      text-align: center;
-      margin-bottom: 10px;
-    }
-    .panel > * {
-      margin: 5px;
-    }
-    .leaflet-tooltip {
-      background: rgba(255,255,255,0.8);
-      border: 1px solid #666;
+    .panel { padding: 10px; text-align: center; margin-bottom: 10px; }
+    .panel > * { margin: 5px; }
+    .leaflet-tooltip.usuario-label {
+      background-color: rgba(255,255,255,0.8);
+      border: 1px solid #ccc;
       padding: 2px 6px;
-      border-radius: 4px;
       font-size: 12px;
-    }
-    .leaflet-tooltip.hidden-tooltip {
-      display: none !important;
+      border-radius: 4px;
+      pointer-events: none;
+      transition: opacity 0.2s ease;
     }
   </style>
 </head>
 <body>
   <div class="panel container d-flex justify-content-center flex-wrap gap-2">
-    <input type="text" id="usuarioAsignar" class="form-control" placeholder="Usuario a asignar" style="max-width: 250px;" list="usuariosList" />
-    <datalist id="usuariosList"></datalist>
+    <input type="text" id="usuarioAsignar" class="form-control" placeholder="Usuario a asignar" style="max-width: 250px;" />
     <button id="btnAsignar" class="btn btn-primary">Asignar</button>
     <button id="btnDesasignar" class="btn btn-warning">Desasignar seleccionadas</button>
     <button id="btnToggleVisitadas" class="btn btn-secondary">Ocultar visitadas</button>
     <button id="btnVerEstadisticas" class="btn btn-info">Ver estadísticas</button>
     <button id="btnToggleSatelite" class="btn btn-outline-secondary">Mapa Satelital</button>
     <button id="btnModoEdicion" class="btn btn-outline-secondary">Modo edición</button>
+    <input type="text" id="filtroUsuario" class="form-control" placeholder="Filtrar por usuario" style="max-width: 200px;" />
   </div>
   <div id="map" class="container-fluid px-0"></div>
 
@@ -51,32 +44,70 @@
       otro: 'gray'
     };
 
+    const coloresUsuarios = {};
+    const coloresDisponibles = [
+      '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
+      '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe',
+      '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000'
+    ];
+
+    function getColorUsuario(usuario) {
+      if (!usuario) return 'black';
+      if (!coloresUsuarios[usuario]) {
+        coloresUsuarios[usuario] = coloresDisponibles[Object.keys(coloresUsuarios).length % coloresDisponibles.length];
+      }
+      return coloresUsuarios[usuario];
+    }
+
     const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-      attribution: '© OpenStreetMap contributors'
+      maxZoom: 18, attribution: '© OpenStreetMap'
     });
 
     const satelite = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-      maxZoom: 18,
-      subdomains:['mt0','mt1','mt2','mt3'],
-      attribution: '© Google'
+      maxZoom: 18, subdomains:['mt0','mt1','mt2','mt3'], attribution: '© Google'
     });
 
     const mapa = L.map('map', {
-      center: [-31.2422, -64.4722],
-      zoom: 15,
-      maxZoom: 18,
-      layers: [osm]
+      center: [-31.2422, -64.4722], zoom: 15, maxZoom: 18, layers: [osm]
     });
+
+    const drawnItems = new L.FeatureGroup();
+    mapa.addLayer(drawnItems);
 
     let capaSateliteActiva = false;
     let marcadores = [];
+    let tooltips = [];
     let seleccionadas = new Set();
     let mostrarVisitadas = true;
-    const drawnItems = new L.FeatureGroup();
-    mapa.addLayer(drawnItems);
-    const labels = [];
-    const coloresUsuarios = {};
+    let usuarioFiltro = "";
+
+    const drawControl = new L.Control.Draw({
+      draw: {
+        rectangle: true,
+        polygon: true,
+        circle: false,
+        marker: false,
+        circlemarker: false,
+        polyline: false
+      },
+      edit: { featureGroup: drawnItems, edit: false, remove: false }
+    });
+    mapa.addControl(drawControl);
+
+    mapa.on('draw:created', function (e) {
+      const layer = e.layer;
+      drawnItems.clearLayers();
+      drawnItems.addLayer(layer);
+      seleccionadas.clear();
+      marcadores.forEach(marker => {
+        if (layer.getBounds().contains(marker.getLatLng())) {
+          seleccionadas.add(marker.options.casaId);
+          marker.setStyle({ weight: 4 });
+        } else {
+          marker.setStyle({ weight: marker.options.asignado ? 2 : 1 });
+        }
+      });
+    });
 
     document.getElementById('btnToggleSatelite').addEventListener('click', () => {
       if (capaSateliteActiva) {
@@ -91,123 +122,16 @@
       capaSateliteActiva = !capaSateliteActiva;
     });
 
-    const drawControl = new L.Control.Draw({
-      draw: {
-        rectangle: true,
-        polygon: true,
-        circle: false,
-        marker: false,
-        polyline: false,
-        circlemarker: false
-      },
-      edit: { featureGroup: drawnItems, edit: false, remove: false }
-    });
-    mapa.addControl(drawControl);
-
-    mapa.on('draw:created', function (e) {
-      const layer = e.layer;
-      drawnItems.clearLayers();
-      drawnItems.addLayer(layer);
-      seleccionadas.clear();
-
-      marcadores.forEach(marker => {
-        const dentro = e.layer.getBounds().contains(marker.getLatLng());
-        if (dentro) {
-          seleccionadas.add(marker.options.casaId);
-          marker.setStyle({ weight: 4 });
-        } else {
-          marker.setStyle({ weight: marker.options.asignado ? 2 : 1 });
-        }
-      });
-    });
-
-    mapa.on('mousedown touchstart', () => {
-      labels.forEach(l => l.getElement().classList.add('hidden-tooltip'));
-    });
-
-    function filtrarVisitadas(casas) {
-      return mostrarVisitadas ? casas : casas.filter(c => c.estado !== 'visitada');
-    }
-
-    function generarColor(nombre) {
-      if (coloresUsuarios[nombre]) return coloresUsuarios[nombre];
-      const hash = Array.from(nombre).reduce((a, c) => a + c.charCodeAt(0), 0);
-      const color = `hsl(${hash * 47 % 360}, 80%, 40%)`;
-      coloresUsuarios[nombre] = color;
-      return color;
-    }
-
-    async function cargarCasas() {
-      const res = await fetch('/casas');
-      const casas = await res.json();
-
-      const input = document.getElementById('usuarioAsignar');
-      const datalist = document.getElementById('usuariosList');
-      const usuariosUnicos = [...new Set(casas.map(c => c.asignado_a).filter(Boolean))];
-      datalist.innerHTML = usuariosUnicos.map(u => `<option value="${u}">`).join('');
-
-      marcadores.forEach(m => mapa.removeLayer(m));
-      marcadores = [];
-      labels.forEach(l => mapa.removeLayer(l));
-      labels.length = 0;
-
-      const casasFiltradas = filtrarVisitadas(casas);
-      const agrupadasPorUsuario = {};
-
-      casasFiltradas.forEach(casa => {
-        const color = estadoColores[casa.estado] || 'gray';
-        const borde = casa.asignado_a ? generarColor(casa.asignado_a) : 'black';
-
-        const marker = L.circleMarker([casa.latitud, casa.longitud], {
-          radius: 8,
-          color: borde,
-          fillColor: color,
-          fillOpacity: 0.8,
-          weight: casa.asignado_a ? 2 : 1,
-          casaId: casa.id,
-          asignado: !!casa.asignado_a
-        }).addTo(mapa);
-
-        marker.bindPopup(`
-          <b>${casa.direccion}</b><br>
-          Estado: ${casa.estado || '(sin estado)'}<br>
-          Asignado a: ${casa.asignado_a || 'nadie'}
-        `);
-
-        if (casa.asignado_a) {
-          if (!agrupadasPorUsuario[casa.asignado_a]) agrupadasPorUsuario[casa.asignado_a] = [];
-          agrupadasPorUsuario[casa.asignado_a].push([casa.latitud, casa.longitud]);
-        }
-
-        marcadores.push(marker);
-      });
-
-      // Crear etiquetas
-      for (const usuario in agrupadasPorUsuario) {
-        const puntos = agrupadasPorUsuario[usuario];
-        const lat = puntos.reduce((a, p) => a + p[0], 0) / puntos.length;
-        const lng = puntos.reduce((a, p) => a + p[1], 0) / puntos.length;
-        const tooltip = L.tooltip({
-          permanent: true,
-          direction: 'top',
-          offset: [0, -12],
-          className: 'usuario-label'
-        }).setLatLng([lat, lng]).setContent(usuario).addTo(mapa);
-        labels.push(tooltip);
-      }
-    }
-
     document.getElementById('btnAsignar').addEventListener('click', async () => {
       const usuario = document.getElementById('usuarioAsignar').value.trim();
       if (!usuario || seleccionadas.size === 0) return alert('Faltan datos o casas seleccionadas');
-
       const res = await fetch('/asignar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ usuario, ids: [...seleccionadas] })
       });
-
       if (res.ok) {
+        alert('Casas asignadas');
         seleccionadas.clear();
         cargarCasas();
       } else {
@@ -218,14 +142,13 @@
     document.getElementById('btnDesasignar').addEventListener('click', async () => {
       if (seleccionadas.size === 0) return alert('No hay casas seleccionadas');
       if (!confirm('¿Seguro que querés desasignar y borrar estado y comentario?')) return;
-
       const res = await fetch('/desasignar', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: [...seleccionadas] })
       });
-
       if (res.ok) {
+        alert('Casas desasignadas');
         seleccionadas.clear();
         cargarCasas();
       } else {
@@ -246,6 +169,79 @@
     document.getElementById('btnModoEdicion').addEventListener('click', () => {
       window.location.href = '/editar.html';
     });
+
+    document.getElementById('filtroUsuario').addEventListener('input', e => {
+      usuarioFiltro = e.target.value.trim().toLowerCase();
+      cargarCasas();
+    });
+
+    async function cargarCasas() {
+      const res = await fetch('/casas');
+      const casas = await res.json();
+
+      marcadores.forEach(m => mapa.removeLayer(m));
+      tooltips.forEach(t => mapa.removeLayer(t));
+      marcadores = [];
+      tooltips = [];
+
+      const filtradas = casas.filter(c => {
+        const visible = mostrarVisitadas || c.estado !== 'visitada';
+        const coincideUsuario = !usuarioFiltro || (c.asignado_a || '').toLowerCase().includes(usuarioFiltro);
+        return visible && coincideUsuario;
+      });
+
+      const porUsuario = {};
+
+      filtradas.forEach(casa => {
+        const color = estadoColores[casa.estado] || 'gray';
+        const borde = getColorUsuario(casa.asignado_a);
+
+        const marker = L.circleMarker([casa.latitud, casa.longitud], {
+          radius: 8,
+          color: borde,
+          fillColor: color,
+          fillOpacity: 0.8,
+          weight: casa.asignado_a ? 2 : 1,
+          casaId: casa.id,
+          asignado: !!casa.asignado_a
+        }).addTo(mapa);
+
+        marker.bindPopup(`
+          <b>${casa.direccion}</b><br>
+          Estado: ${casa.estado || '(sin estado)'}<br>
+          Asignado a: ${casa.asignado_a || 'nadie'}
+        `);
+
+        if (casa.asignado_a) {
+          if (!porUsuario[casa.asignado_a]) porUsuario[casa.asignado_a] = [];
+          porUsuario[casa.asignado_a].push([casa.latitud, casa.longitud]);
+        }
+
+        marcadores.push(marker);
+      });
+
+      for (const [usuario, coords] of Object.entries(porUsuario)) {
+        const centro = coords.reduce((acc, c) => [acc[0]+c[0], acc[1]+c[1]], [0,0]).map(x => x / coords.length);
+        const tooltip = L.tooltip({
+          permanent: true,
+          direction: 'top',
+          className: 'usuario-label'
+        })
+        .setLatLng(centro)
+        .setContent(usuario)
+        .addTo(mapa);
+        tooltips.push(tooltip);
+      }
+
+      mapa.getContainer().addEventListener('pointermove', ocultarTooltips);
+    }
+
+    function ocultarTooltips() {
+      document.querySelectorAll('.usuario-label').forEach(label => {
+        label.style.opacity = '0';
+        setTimeout(() => label.style.opacity = '1', 1000);
+      });
+    }
 
     cargarCasas();
   </script>
