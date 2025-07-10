@@ -1,0 +1,28 @@
+<!-- Botón para abrir el modal -->
+<button class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#modalCasaFaltante">
+  ¿Falta una casa?
+</button>
+
+<!-- Modal Bootstrap -->
+<div class="modal fade" id="modalCasaFaltante" tabindex="-1" aria-labelledby="modalCasaFaltanteLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content shadow">
+      <div class="modal-header bg-warning text-dark">
+        <h5 class="modal-title fw-bold" id="modalCasaFaltanteLabel">¿Llegaste a una casa no marcada?</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+      </div>
+      <div class="modal-body">
+        <p class="mb-2">Si llegaste a una casa que no está marcada en el mapa:</p>
+        <ul class="list-unstyled">
+          <li>📸 Sacale una <strong>captura</strong> de pantalla o una foto.</li>
+          <li>🟢 Marcá el punto en <strong>Google Maps</strong>.</li>
+          <li>📍 Copiá las <strong>coordenadas</strong> exactas (latitud y longitud).</li>
+        </ul>
+        <p class="mt-3 mb-0">Después podés agregarla fácilmente en el <strong>modo edición</strong> de esta aplicación.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Entendido</button>
+      </div>
+    </div>
+  </div>
+</div>

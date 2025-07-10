@@ -38,212 +38,219 @@
   <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
   <script>
-    const estadoColores = {
-      visitada: 'green',
-      no_atendieron: 'orange',
-      otro: 'gray'
-    };
+  const estadoColores = {
+    visitada: 'green',
+    no_atendieron: 'orange',
+    otro: 'gray'
+  };
 
-    const coloresUsuarios = {};
-    const coloresDisponibles = [
-      '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
-      '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe',
-      '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000'
-    ];
+  const coloresUsuarios = {};
+  const coloresDisponibles = [
+    '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
+    '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe',
+    '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000'
+  ];
 
-    function getColorUsuario(usuario) {
-      if (!usuario) return 'black';
-      if (!coloresUsuarios[usuario]) {
-        coloresUsuarios[usuario] = coloresDisponibles[Object.keys(coloresUsuarios).length % coloresDisponibles.length];
-      }
-      return coloresUsuarios[usuario];
+  function getColorUsuario(usuario) {
+    if (!usuario) return 'black';
+    if (!coloresUsuarios[usuario]) {
+      coloresUsuarios[usuario] = coloresDisponibles[Object.keys(coloresUsuarios).length % coloresDisponibles.length];
     }
+    return coloresUsuarios[usuario];
+  }
 
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18, attribution: '© OpenStreetMap'
+  const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 18, attribution: '© OpenStreetMap'
+  });
+
+  const satelite = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+    maxZoom: 18, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'], attribution: '© Google'
+  });
+
+  const mapa = L.map('map', {
+    center: [-31.2422, -64.4722],
+    zoom: 15,
+    maxZoom: 18,
+    layers: [osm]
+  });
+
+  const drawnItems = new L.FeatureGroup();
+  mapa.addLayer(drawnItems);
+
+  let capaSateliteActiva = false;
+  let marcadores = [];
+  let tooltips = [];
+  let seleccionadas = new Set();
+  let mostrarVisitadas = true;
+  let usuarioFiltro = "";
+
+  const drawControl = new L.Control.Draw({
+    draw: {
+      rectangle: true,
+      polygon: true,
+      circle: false,
+      marker: false,
+      circlemarker: false,
+      polyline: false
+    },
+    edit: { featureGroup: drawnItems, edit: false, remove: false }
+  });
+  mapa.addControl(drawControl);
+
+  mapa.on('draw:created', function (e) {
+    const layer = e.layer;
+    drawnItems.clearLayers();
+    drawnItems.addLayer(layer);
+    seleccionadas.clear();
+    marcadores.forEach(marker => {
+      if (layer.getBounds().contains(marker.getLatLng())) {
+        seleccionadas.add(marker.options.casaId);
+        marker.setStyle({ weight: 4 });
+      } else {
+        marker.setStyle({ weight: marker.options.asignado ? 2 : 1 });
+      }
     });
+  });
 
-    const satelite = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-      maxZoom: 18, subdomains:['mt0','mt1','mt2','mt3'], attribution: '© Google'
+  document.getElementById('btnToggleSatelite').addEventListener('click', () => {
+    if (capaSateliteActiva) {
+      mapa.removeLayer(satelite);
+      mapa.addLayer(osm);
+      document.getElementById('btnToggleSatelite').innerText = "Mapa Satelital";
+    } else {
+      mapa.removeLayer(osm);
+      mapa.addLayer(satelite);
+      document.getElementById('btnToggleSatelite').innerText = "Mapa Normal";
+    }
+    capaSateliteActiva = !capaSateliteActiva;
+  });
+
+  document.getElementById('btnAsignar').addEventListener('click', async () => {
+    const usuario = document.getElementById('usuarioAsignar').value.trim();
+    if (!usuario || seleccionadas.size === 0) return alert('Faltan datos o casas seleccionadas');
+    const res = await fetch('/asignar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario, ids: [...seleccionadas] })
     });
-
-    const mapa = L.map('map', {
-      center: [-31.2422, -64.4722], zoom: 15, maxZoom: 18, layers: [osm]
-    });
-
-    const drawnItems = new L.FeatureGroup();
-    mapa.addLayer(drawnItems);
-
-    let capaSateliteActiva = false;
-    let marcadores = [];
-    let tooltips = [];
-    let seleccionadas = new Set();
-    let mostrarVisitadas = true;
-    let usuarioFiltro = "";
-
-    const drawControl = new L.Control.Draw({
-      draw: {
-        rectangle: true,
-        polygon: true,
-        circle: false,
-        marker: false,
-        circlemarker: false,
-        polyline: false
-      },
-      edit: { featureGroup: drawnItems, edit: false, remove: false }
-    });
-    mapa.addControl(drawControl);
-
-    mapa.on('draw:created', function (e) {
-      const layer = e.layer;
-      drawnItems.clearLayers();
-      drawnItems.addLayer(layer);
+    if (res.ok) {
+      alert('Casas asignadas');
       seleccionadas.clear();
-      marcadores.forEach(marker => {
-        if (layer.getBounds().contains(marker.getLatLng())) {
-          seleccionadas.add(marker.options.casaId);
-          marker.setStyle({ weight: 4 });
-        } else {
-          marker.setStyle({ weight: marker.options.asignado ? 2 : 1 });
-        }
-      });
-    });
-
-    document.getElementById('btnToggleSatelite').addEventListener('click', () => {
-      if (capaSateliteActiva) {
-        mapa.removeLayer(satelite);
-        mapa.addLayer(osm);
-        document.getElementById('btnToggleSatelite').innerText = "Mapa Satelital";
-      } else {
-        mapa.removeLayer(osm);
-        mapa.addLayer(satelite);
-        document.getElementById('btnToggleSatelite').innerText = "Mapa Normal";
-      }
-      capaSateliteActiva = !capaSateliteActiva;
-    });
-
-    document.getElementById('btnAsignar').addEventListener('click', async () => {
-      const usuario = document.getElementById('usuarioAsignar').value.trim();
-      if (!usuario || seleccionadas.size === 0) return alert('Faltan datos o casas seleccionadas');
-      const res = await fetch('/asignar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ usuario, ids: [...seleccionadas] })
-      });
-      if (res.ok) {
-        alert('Casas asignadas');
-        seleccionadas.clear();
-        cargarCasas();
-      } else {
-        alert('Error al asignar');
-      }
-    });
-
-    document.getElementById('btnDesasignar').addEventListener('click', async () => {
-      if (seleccionadas.size === 0) return alert('No hay casas seleccionadas');
-      if (!confirm('¿Seguro que querés desasignar y borrar estado y comentario?')) return;
-      const res = await fetch('/desasignar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: [...seleccionadas] })
-      });
-      if (res.ok) {
-        alert('Casas desasignadas');
-        seleccionadas.clear();
-        cargarCasas();
-      } else {
-        alert('Error al desasignar');
-      }
-    });
-
-    document.getElementById('btnToggleVisitadas').addEventListener('click', () => {
-      mostrarVisitadas = !mostrarVisitadas;
-      document.getElementById('btnToggleVisitadas').innerText = mostrarVisitadas ? 'Ocultar visitadas' : 'Mostrar visitadas';
       cargarCasas();
-    });
+    } else {
+      alert('Error al asignar');
+    }
+  });
 
-    document.getElementById('btnVerEstadisticas').addEventListener('click', () => {
-      window.location.href = '/estadisticas.html';
+  document.getElementById('btnDesasignar').addEventListener('click', async () => {
+    if (seleccionadas.size === 0) return alert('No hay casas seleccionadas');
+    if (!confirm('¿Seguro que querés desasignar y borrar estado y comentario?')) return;
+    const res = await fetch('/desasignar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [...seleccionadas] })
     });
-
-    document.getElementById('btnModoEdicion').addEventListener('click', () => {
-      window.location.href = '/editar.html';
-    });
-
-    document.getElementById('filtroUsuario').addEventListener('input', e => {
-      usuarioFiltro = e.target.value.trim().toLowerCase();
+    if (res.ok) {
+      alert('Casas desasignadas');
+      seleccionadas.clear();
       cargarCasas();
-    });
-
-    async function cargarCasas() {
-      const res = await fetch('/casas');
-      const casas = await res.json();
-
-      marcadores.forEach(m => mapa.removeLayer(m));
-      tooltips.forEach(t => mapa.removeLayer(t));
-      marcadores = [];
-      tooltips = [];
-
-      const filtradas = casas.filter(c => {
-        const visible = mostrarVisitadas || c.estado !== 'visitada';
-        const coincideUsuario = !usuarioFiltro || (c.asignado_a || '').toLowerCase().includes(usuarioFiltro);
-        return visible && coincideUsuario;
-      });
-
-      const porUsuario = {};
-
-      filtradas.forEach(casa => {
-        const color = estadoColores[casa.estado] || 'gray';
-        const borde = getColorUsuario(casa.asignado_a);
-
-        const marker = L.circleMarker([casa.latitud, casa.longitud], {
-          radius: 8,
-          color: borde,
-          fillColor: color,
-          fillOpacity: 0.8,
-          weight: casa.asignado_a ? 2 : 1,
-          casaId: casa.id,
-          asignado: !!casa.asignado_a
-        }).addTo(mapa);
-
-        marker.bindPopup(`
-          <b>${casa.direccion}</b><br>
-          Estado: ${casa.estado || '(sin estado)'}<br>
-          Asignado a: ${casa.asignado_a || 'nadie'}
-        `);
-
-        if (casa.asignado_a) {
-          if (!porUsuario[casa.asignado_a]) porUsuario[casa.asignado_a] = [];
-          porUsuario[casa.asignado_a].push([casa.latitud, casa.longitud]);
-        }
-
-        marcadores.push(marker);
-      });
-
-      for (const [usuario, coords] of Object.entries(porUsuario)) {
-        const centro = coords.reduce((acc, c) => [acc[0]+c[0], acc[1]+c[1]], [0,0]).map(x => x / coords.length);
-        const tooltip = L.tooltip({
-          permanent: true,
-          direction: 'top',
-          className: 'usuario-label'
-        })
-        .setLatLng(centro)
-        .setContent(usuario)
-        .addTo(mapa);
-        tooltips.push(tooltip);
-      }
-
-      mapa.getContainer().addEventListener('pointermove', ocultarTooltips);
+    } else {
+      alert('Error al desasignar');
     }
+  });
 
-    function ocultarTooltips() {
-      document.querySelectorAll('.usuario-label').forEach(label => {
-        label.style.opacity = '0';
-        setTimeout(() => label.style.opacity = '1', 1000);
-      });
-    }
-
+  document.getElementById('btnToggleVisitadas').addEventListener('click', () => {
+    mostrarVisitadas = !mostrarVisitadas;
+    document.getElementById('btnToggleVisitadas').innerText = mostrarVisitadas ? 'Ocultar visitadas' : 'Mostrar visitadas';
     cargarCasas();
-  </script>
+  });
+
+  document.getElementById('btnVerEstadisticas').addEventListener('click', () => {
+    window.location.href = '/estadisticas.html';
+  });
+
+  document.getElementById('btnModoEdicion').addEventListener('click', () => {
+    window.location.href = '/editar.html';
+  });
+
+  document.getElementById('filtroUsuario').addEventListener('input', e => {
+    usuarioFiltro = e.target.value.trim().toLowerCase();
+    cargarCasas();
+  });
+
+  function ocultarTooltips() {
+    document.querySelectorAll('.usuario-label').forEach(label => {
+      label.style.opacity = '0';
+      setTimeout(() => label.style.opacity = '1', 1000);
+    });
+  }
+
+  mapa.getContainer().addEventListener('pointermove', ocultarTooltips);
+
+
+  async function cargarCasas() {
+    const res = await fetch('/casas');
+    const casas = await res.json();
+
+    marcadores.forEach(m => mapa.removeLayer(m));
+    tooltips.forEach(t => mapa.removeLayer(t));
+    marcadores = [];
+    tooltips = [];
+
+    const filtradas = casas.filter(c => {
+      const visible = mostrarVisitadas || c.estado !== 'visitada';
+      const coincideUsuario = !usuarioFiltro || (c.asignado_a || '').toLowerCase().includes(usuarioFiltro);
+      return visible && coincideUsuario;
+    });
+
+    const porUsuario = {};
+
+    filtradas.forEach(casa => {
+      const color = estadoColores[casa.estado] || 'gray';
+      const borde = getColorUsuario(casa.asignado_a);
+
+      const marker = L.circleMarker([casa.latitud, casa.longitud], {
+        radius: 8,
+        color: borde,
+        fillColor: color,
+        fillOpacity: 0.8,
+        weight: casa.asignado_a ? 2 : 1,
+        casaId: casa.id,
+        asignado: !!casa.asignado_a
+      }).addTo(mapa);
+
+      marker.bindPopup(`
+        <b>${casa.direccion}</b><br>
+        Estado: ${casa.estado || '(sin estado)'}<br>
+        Asignado a: ${casa.asignado_a || 'nadie'}
+      `);
+
+      if (casa.asignado_a) {
+        if (!porUsuario[casa.asignado_a]) porUsuario[casa.asignado_a] = [];
+        porUsuario[casa.asignado_a].push([casa.latitud, casa.longitud]);
+      }
+
+      marcadores.push(marker);
+    });
+
+    for (const [usuario, coords] of Object.entries(porUsuario)) {
+      const centro = coords.reduce((acc, c) => [acc[0]+c[0], acc[1]+c[1]], [0,0]).map(x => x / coords.length);
+      const tooltip = L.tooltip({
+        permanent: true,
+        direction: 'top',
+        className: 'usuario-label'
+      })
+      .setLatLng(centro)
+      .setContent(usuario)
+      .addTo(mapa);
+      tooltips.push(tooltip);
+    }
+
+  }
+  cargarCasas();
+  setInterval(() => {
+    cargarCasas();
+  }, 5000);
+</script>
 </body>
 </html>
