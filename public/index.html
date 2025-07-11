@@ -124,24 +124,36 @@
     let marcadorUbicacion = null;
 
     if (navigator.geolocation) {
-      navigator.geolocation.watchPosition(pos => {
+      const iconoUbicacion = L.icon({
+        iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
+        iconSize: [25, 25],
+        iconAnchor: [12, 24],
+        popupAnchor: [0, -25]
+      });
+
+      const watchId = navigator.geolocation.watchPosition(pos => {
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
         const punto = [lat, lng];
 
         if (!marcadorUbicacion) {
-          marcadorUbicacion = L.circleMarker(punto, {
-            radius: 7,
-            color: 'navy',
-            fillColor: 'blue',
-            fillOpacity: 0.8
-          }).addTo(mapa).bindTooltip("Tu ubicación", { permanent: true, direction: 'top' });
+          marcadorUbicacion = L.marker(punto, { icon: iconoUbicacion })
+            .addTo(mapa)
+            .bindTooltip("Tu ubicación", { permanent: true, direction: 'top' });
 
-          mapa.setView(punto, 16); // centramos al principio
+          mapa.setView(punto, 16); // centramos solo una vez
+
+          // Ocultar marcador si el usuario toca el mapa
+          mapa.on('click', () => {
+            if (marcadorUbicacion) {
+              mapa.removeLayer(marcadorUbicacion);
+              marcadorUbicacion = null;
+              navigator.geolocation.clearWatch(watchId); // ya no seguimos rastreando
+            }
+          });
         } else {
           marcadorUbicacion.setLatLng(punto);
         }
-
       }, err => {
         console.warn('No se pudo obtener tu ubicación:', err.message);
       }, {
@@ -150,6 +162,7 @@
         timeout: 10000
       });
     }
+
 
     document.getElementById('btnToggleSatelite').addEventListener('click', () => {
       if (capaSateliteActiva) {
