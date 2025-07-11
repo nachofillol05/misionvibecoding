@@ -121,6 +121,35 @@
     let marcadores = [];
     let idSeleccionado = null;
     let intervaloActualizacion = null;
+    let marcadorUbicacion = null;
+
+    if (navigator.geolocation) {
+      navigator.geolocation.watchPosition(pos => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const punto = [lat, lng];
+
+        if (!marcadorUbicacion) {
+          marcadorUbicacion = L.circleMarker(punto, {
+            radius: 7,
+            color: 'navy',
+            fillColor: 'blue',
+            fillOpacity: 0.8
+          }).addTo(mapa).bindTooltip("Tu ubicación", { permanent: true, direction: 'top' });
+
+          mapa.setView(punto, 16); // centramos al principio
+        } else {
+          marcadorUbicacion.setLatLng(punto);
+        }
+
+      }, err => {
+        console.warn('No se pudo obtener tu ubicación:', err.message);
+      }, {
+        enableHighAccuracy: true,
+        maximumAge: 5000,
+        timeout: 10000
+      });
+    }
 
     document.getElementById('btnToggleSatelite').addEventListener('click', () => {
       if (capaSateliteActiva) {
