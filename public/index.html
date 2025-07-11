@@ -121,47 +121,47 @@
     let marcadores = [];
     let idSeleccionado = null;
     let intervaloActualizacion = null;
-    let marcadorUbicacion = null;
+   let marcadorUbicacion = null;
 
-    if (navigator.geolocation) {
-      const iconoUbicacion = L.icon({
-        iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
-        iconSize: [25, 25],
-        iconAnchor: [12, 24],
-        popupAnchor: [0, -25]
-      });
+if (navigator.geolocation) {
+  const iconoUbicacion = L.icon({
+    iconUrl: 'https://cdn-icons-png.flaticon.com/512/64/64113.png',
+    iconSize: [25, 25],
+    iconAnchor: [12, 24],
+    popupAnchor: [0, -25]
+  });
 
-      const watchId = navigator.geolocation.watchPosition(pos => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        const punto = [lat, lng];
+  const watchId = navigator.geolocation.watchPosition(pos => {
+    const lat = pos.coords.latitude;
+    const lng = pos.coords.longitude;
+    const punto = [lat, lng];
 
-        if (!marcadorUbicacion) {
-          marcadorUbicacion = L.marker(punto, { icon: iconoUbicacion })
-            .addTo(mapa)
-            .bindTooltip("Tu ubicación", { permanent: true, direction: 'top' });
+    if (!marcadorUbicacion) {
+      marcadorUbicacion = L.marker(punto, { icon: iconoUbicacion })
+        .addTo(mapa)
+        .bindTooltip("Tu ubicación", { permanent: true, direction: 'top' })
+        .openTooltip();
 
-          mapa.setView(punto, 16); // centramos solo una vez
+      mapa.setView(punto, 16);
 
-          // Ocultar marcador si el usuario toca el mapa
-          mapa.on('click', () => {
-            if (marcadorUbicacion) {
-              mapa.removeLayer(marcadorUbicacion);
-              marcadorUbicacion = null;
-              navigator.geolocation.clearWatch(watchId); // ya no seguimos rastreando
-            }
-          });
-        } else {
-          marcadorUbicacion.setLatLng(punto);
+      // Al hacer click en el mapa, ocultamos solo el tooltip
+      mapa.on('click', () => {
+        if (marcadorUbicacion && marcadorUbicacion.getTooltip()) {
+          marcadorUbicacion.unbindTooltip();
         }
-      }, err => {
-        console.warn('No se pudo obtener tu ubicación:', err.message);
-      }, {
-        enableHighAccuracy: true,
-        maximumAge: 5000,
-        timeout: 10000
       });
+    } else {
+      marcadorUbicacion.setLatLng(punto);
     }
+  }, err => {
+    console.warn('No se pudo obtener tu ubicación:', err.message);
+  }, {
+    enableHighAccuracy: true,
+    maximumAge: 5000,
+    timeout: 10000
+  });
+}
+
 
 
     document.getElementById('btnToggleSatelite').addEventListener('click', () => {
