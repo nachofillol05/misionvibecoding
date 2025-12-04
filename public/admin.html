@@ -248,9 +248,18 @@
         asignado: !!casa.asignado_a
       }).addTo(mapa);
 
-      const fechaFormateada = casa.fecha_asignacion
-      ? new Date(casa.fecha_asignacion).toLocaleDateString('es-AR')
-      : '(sin fecha)';
+      function toLocalDate(fechaStr) {
+          if (!fechaStr) return '(sin fecha)';
+
+          // Tomamos únicamente la parte "AAAA-MM-DD"
+          const soloFecha = fechaStr.split('T')[0];
+
+          const [year, month, day] = soloFecha.split('-');
+          return `${day}/${month}/${year}`;
+        }
+
+        const fechaFormateada = toLocalDate(casa.fecha_asignacion);
+
 
 
      marker.bindPopup(`
