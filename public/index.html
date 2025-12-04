@@ -198,12 +198,18 @@ if (navigator.geolocation) {
     async function cargarCasas(usuario) {
   try {
     let todas;
+
     if (navigator.onLine) {
       const res = await fetch(`/casas?usuario=${usuario}`);
       todas = await res.json();
-      localStorage.setItem('casas', JSON.stringify(todas)); // guardo siempre la versión más reciente online
+      localStorage.setItem('casas', JSON.stringify(todas));
     } else {
-      // Si está offline, usamos lo que hay en localStorage
+      // Solo mostramos este alert UNA VEZ
+      if (!window.alertOfflineMostrado) {
+        alert("Cargando casas guardadas offline...");
+        window.alertOfflineMostrado = true;
+      }
+
       const almacenadas = localStorage.getItem('casas');
       if (!almacenadas) throw new Error("No hay casas guardadas offline");
       todas = JSON.parse(almacenadas);
@@ -237,36 +243,9 @@ if (navigator.geolocation) {
 
   } catch (error) {
     console.error("No se pudieron cargar casas:", error);
-    alert("Cargando casas guardadas offline...");
-    // Intentamos cargar casas offline si hay localStorage
-    const almacenadas = localStorage.getItem('casas');
-    if (almacenadas) {
-      const todas = JSON.parse(almacenadas);
-      const asignadas = todas.filter(c => c.asignado_a && c.asignado_a.toLowerCase() === usuario.toLowerCase());
-      const casasFiltradas = filtrarVisitadas(asignadas);
-      // mismo código de marcadores
-      marcadores.forEach(m => mapa.removeLayer(m));
-      marcadores = [];
-      casasFiltradas.forEach(casa => {
-        const color = estadoColores[casa.estado] || 'gray';
-        const marker = L.circleMarker([casa.latitud, casa.longitud], {
-          radius: 8,
-          color: 'blue',
-          fillColor: color,
-          fillOpacity: 0.8,
-          weight: 2,
-          casaId: casa.id
-        }).addTo(mapa);
-        marker.on('click', () => {
-          idSeleccionado = casa.id;
-          document.getElementById('comentario').value = casa.comentario || '';
-          new bootstrap.Modal(document.getElementById('estadoModal')).show();
-        });
-        marcadores.push(marker);
-      });
-    }
   }
 }
+
 
 
     document.querySelectorAll('#botonesEstado button').forEach(btn => {
