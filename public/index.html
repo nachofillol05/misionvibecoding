@@ -196,55 +196,55 @@ if (navigator.geolocation) {
     }
 
     async function cargarCasas(usuario) {
-  try {
-    let todas;
+      try {
+        let todas;
 
-    if (navigator.onLine) {
-      const res = await fetch(`/casas?usuario=${usuario}`);
-      todas = await res.json();
-      localStorage.setItem('casas', JSON.stringify(todas));
-    } else {
-      // Solo mostramos este alert UNA VEZ
-      if (!window.alertOfflineMostrado) {
-        alert("Cargando casas guardadas offline...");
-        window.alertOfflineMostrado = true;
+        if (navigator.onLine) {
+          const res = await fetch(`/casas?usuario=${usuario}`);
+          todas = await res.json();
+          localStorage.setItem('casas', JSON.stringify(todas));
+        } else {
+          // Solo mostramos este alert UNA VEZ
+          if (!window.alertOfflineMostrado) {
+            alert("Cargando casas guardadas offline...");
+            window.alertOfflineMostrado = true;
+          }
+
+          const almacenadas = localStorage.getItem('casas');
+          if (!almacenadas) throw new Error("No hay casas guardadas offline");
+          todas = JSON.parse(almacenadas);
+        }
+
+        const asignadas = todas.filter(c => c.asignado_a && c.asignado_a.toLowerCase() === usuario.toLowerCase());
+        const casasFiltradas = filtrarVisitadas(asignadas);
+
+        marcadores.forEach(m => mapa.removeLayer(m));
+        marcadores = [];
+
+        casasFiltradas.forEach(casa => {
+          const color = estadoColores[casa.estado] || 'gray';
+          const marker = L.circleMarker([casa.latitud, casa.longitud], {
+            radius: 8,
+            color: 'blue',
+            fillColor: color,
+            fillOpacity: 0.8,
+            weight: 2,
+            casaId: casa.id
+          }).addTo(mapa);
+
+          marker.on('click', () => {
+            idSeleccionado = casa.id;
+            document.getElementById('comentario').value = casa.comentario || '';
+            new bootstrap.Modal(document.getElementById('estadoModal')).show();
+          });
+
+          marcadores.push(marker);
+        });
+
+      } catch (error) {
+        console.error("No se pudieron cargar casas:", error);
       }
-
-      const almacenadas = localStorage.getItem('casas');
-      if (!almacenadas) throw new Error("No hay casas guardadas offline");
-      todas = JSON.parse(almacenadas);
     }
-
-    const asignadas = todas.filter(c => c.asignado_a && c.asignado_a.toLowerCase() === usuario.toLowerCase());
-    const casasFiltradas = filtrarVisitadas(asignadas);
-
-    marcadores.forEach(m => mapa.removeLayer(m));
-    marcadores = [];
-
-    casasFiltradas.forEach(casa => {
-      const color = estadoColores[casa.estado] || 'gray';
-      const marker = L.circleMarker([casa.latitud, casa.longitud], {
-        radius: 8,
-        color: 'blue',
-        fillColor: color,
-        fillOpacity: 0.8,
-        weight: 2,
-        casaId: casa.id
-      }).addTo(mapa);
-
-      marker.on('click', () => {
-        idSeleccionado = casa.id;
-        document.getElementById('comentario').value = casa.comentario || '';
-        new bootstrap.Modal(document.getElementById('estadoModal')).show();
-      });
-
-      marcadores.push(marker);
-    });
-
-  } catch (error) {
-    console.error("No se pudieron cargar casas:", error);
-  }
-}
 
 
 
@@ -288,33 +288,42 @@ if (navigator.geolocation) {
   });
 });
 
-window.addEventListener('online', () => {
-  let pendientes = JSON.parse(localStorage.getItem('cambiosPendientes')) || [];
-  pendientes.forEach(cambio => {
-    fetch('/actualizar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cambio)
-    }).then(res => {
-      if (res.ok) {
-        // eliminamos del array de pendientes
-        let actuales = JSON.parse(localStorage.getItem('cambiosPendientes')) || [];
-        actuales = actuales.filter(p => p.id !== cambio.id);
-        localStorage.setItem('cambiosPendientes', JSON.stringify(actuales));
-        cargarCasas(usuarioActual); // refrescamos el mapa
-        alert('Cambios offline sincronizados');
-      }
-    });
-  });
-});
 
 
     function iniciarActualizacionAutomatica() {
       if (intervaloActualizacion) clearInterval(intervaloActualizacion);
-      intervaloActualizacion = setInterval(() => {
-        if (usuarioActual) cargarCasas(usuarioActual);
-      }, 5000); // cada 5 segundos
+
+      intervaloActualizacion = setInterval(async () => {
+        if (usuarioActual) await cargarCasas(usuarioActual);
+
+        let pendientes = JSON.parse(localStorage.getItem('cambiosPendientes')) || [];
+        if (pendientes.length === 0) return;
+
+        const noEnviados = [];
+
+        for (const cambio of pendientes) {
+          try {
+            const res = await fetch('/actualizar', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(cambio)
+            });
+
+            if (!res.ok) noEnviados.push(cambio);
+          } catch (err) {
+            noEnviados.push(cambio);
+          }
+        }
+
+        localStorage.setItem('cambiosPendientes', JSON.stringify(noEnviados));
+
+        if (pendientes.length !== noEnviados.length) {
+          await cargarCasas(usuarioActual); // refrescamos mapa solo una vez
+          console.log('Cambios offline sincronizados');
+        }
+      }, 5000);
     }
+
 
     function detenerActualizacionAutomatica() {
       if (intervaloActualizacion) {
@@ -322,16 +331,6 @@ window.addEventListener('online', () => {
         intervaloActualizacion = null;
       }
     }
-
-
-    //borrar si no anda la descarga offline
-    if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js')
-    .then(() => console.log('Service Worker registrado'))
-    .catch(err => console.error('Error registrando Service Worker', err));
-}
-
-
 
   </script>
 </body>
