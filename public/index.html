@@ -313,6 +313,7 @@ async function intentarSincronizarPendientes() {
   if (pendientes.length !== noEnviados.length) {
     await cargarCasas(usuarioActual);
     console.log('Cambios offline sincronizados al iniciar sesión');
+    alert('Cambios offline sincronizados');
   }
 }
 
