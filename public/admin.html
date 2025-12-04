@@ -248,12 +248,17 @@
         asignado: !!casa.asignado_a
       }).addTo(mapa);
 
-      marker.bindPopup(`
-        <b>${casa.direccion}</b><br>
-        Estado: ${casa.estado || '(sin estado)'}<br>
-        Asignado a: ${casa.asignado_a || 'nadie'}
-        El dia: ${casa.fecha_asignacion || '(sin fecha)'}
-      `);
+      const fechaFormateada = casa.fecha_asignacion
+      ? new Date(casa.fecha_asignacion).toLocaleDateString('es-AR')
+      : '(sin fecha)';
+
+
+     marker.bindPopup(`
+      <b>${casa.direccion}</b><br>
+      Estado: ${casa.estado || '(sin estado)'}<br>
+      Asignado a: ${casa.asignado_a || 'nadie'}<br>
+      Día: ${fechaFormateada}
+    `);
 
       if (casa.asignado_a) {
         if (!porUsuario[casa.asignado_a]) porUsuario[casa.asignado_a] = [];
