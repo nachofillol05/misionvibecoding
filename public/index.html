@@ -188,6 +188,7 @@ if (navigator.geolocation) {
       if (!user) return alert('Ingresá tu usuario');
       usuarioActual = user;
       cargarCasas(user);
+      intentarSincronizarPendientes();
       iniciarActualizacionAutomatica();
     });
 
@@ -289,39 +290,44 @@ if (navigator.geolocation) {
 });
 
 
+async function intentarSincronizarPendientes() {
+  let pendientes = JSON.parse(localStorage.getItem('cambiosPendientes')) || [];
+  if (pendientes.length === 0) return;
 
-    function iniciarActualizacionAutomatica() {
+  const noEnviados = [];
+  for (const cambio of pendientes) {
+    try {
+      const res = await fetch('/actualizar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cambio)
+      });
+      if (!res.ok) noEnviados.push(cambio);
+    } catch (err) {
+      noEnviados.push(cambio);
+    }
+  }
+
+  localStorage.setItem('cambiosPendientes', JSON.stringify(noEnviados));
+
+  if (pendientes.length !== noEnviados.length) {
+    await cargarCasas(usuarioActual);
+    console.log('Cambios offline sincronizados al iniciar sesión');
+  }
+}
+
+
+
+    addEventListener('online', () => {
+      intentarSincronizarPendientes();
+    });
+
+
+        function iniciarActualizacionAutomatica() {
       if (intervaloActualizacion) clearInterval(intervaloActualizacion);
-
-      intervaloActualizacion = setInterval(async () => {
-        if (usuarioActual) await cargarCasas(usuarioActual);
-
-        let pendientes = JSON.parse(localStorage.getItem('cambiosPendientes')) || [];
-        if (pendientes.length === 0) return;
-
-        const noEnviados = [];
-
-        for (const cambio of pendientes) {
-          try {
-            const res = await fetch('/actualizar', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(cambio)
-            });
-
-            if (!res.ok) noEnviados.push(cambio);
-          } catch (err) {
-            noEnviados.push(cambio);
-          }
-        }
-
-        localStorage.setItem('cambiosPendientes', JSON.stringify(noEnviados));
-
-        if (pendientes.length !== noEnviados.length) {
-          await cargarCasas(usuarioActual); // refrescamos mapa solo una vez
-          console.log('Cambios offline sincronizados');
-        }
-      }, 5000);
+      intervaloActualizacion = setInterval(() => {
+        if (usuarioActual) cargarCasas(usuarioActual);
+      }, 5000); // cada 5 segundos
     }
 
 
