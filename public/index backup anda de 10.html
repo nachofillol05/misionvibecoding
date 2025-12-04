@@ -196,138 +196,66 @@ if (navigator.geolocation) {
     }
 
     async function cargarCasas(usuario) {
-  try {
-    let todas;
-    if (navigator.onLine) {
-      const res = await fetch(`/casas?usuario=${usuario}`);
-      todas = await res.json();
-      localStorage.setItem('casas', JSON.stringify(todas)); // guardo siempre la versión más reciente online
-    } else {
-      // Si está offline, usamos lo que hay en localStorage
-      const almacenadas = localStorage.getItem('casas');
-      if (!almacenadas) throw new Error("No hay casas guardadas offline");
-      todas = JSON.parse(almacenadas);
-    }
+      try {
+        const res = await fetch(`/casas?usuario=${usuario}`);
+        const todas = await res.json();
+        const asignadas = todas.filter(c => c.asignado_a && c.asignado_a.toLowerCase() === usuario.toLowerCase());
+        
+        const casasFiltradas = filtrarVisitadas(asignadas);
 
-    const asignadas = todas.filter(c => c.asignado_a && c.asignado_a.toLowerCase() === usuario.toLowerCase());
-    const casasFiltradas = filtrarVisitadas(asignadas);
+        marcadores.forEach(m => mapa.removeLayer(m));
+        marcadores = [];
 
-    marcadores.forEach(m => mapa.removeLayer(m));
-    marcadores = [];
+        casasFiltradas.forEach(casa => {
+          const color = estadoColores[casa.estado] || 'gray';
 
-    casasFiltradas.forEach(casa => {
-      const color = estadoColores[casa.estado] || 'gray';
-      const marker = L.circleMarker([casa.latitud, casa.longitud], {
-        radius: 8,
-        color: 'blue',
-        fillColor: color,
-        fillOpacity: 0.8,
-        weight: 2,
-        casaId: casa.id
-      }).addTo(mapa);
+          const marker = L.circleMarker([casa.latitud, casa.longitud], {
+            radius: 8,
+            color: 'blue',
+            fillColor: color,
+            fillOpacity: 0.8,
+            weight: 2,
+            casaId: casa.id
+          }).addTo(mapa);
 
-      marker.on('click', () => {
-        idSeleccionado = casa.id;
-        document.getElementById('comentario').value = casa.comentario || '';
-        new bootstrap.Modal(document.getElementById('estadoModal')).show();
-      });
+          marker.on('click', () => {
+            idSeleccionado = casa.id;
+            document.getElementById('comentario').value = casa.comentario || '';
+            new bootstrap.Modal(document.getElementById('estadoModal')).show();
+          });
 
-      marcadores.push(marker);
-    });
-
-  } catch (error) {
-    console.error("No se pudieron cargar casas:", error);
-    alert("Cargando casas guardadas offline...");
-    // Intentamos cargar casas offline si hay localStorage
-    const almacenadas = localStorage.getItem('casas');
-    if (almacenadas) {
-      const todas = JSON.parse(almacenadas);
-      const asignadas = todas.filter(c => c.asignado_a && c.asignado_a.toLowerCase() === usuario.toLowerCase());
-      const casasFiltradas = filtrarVisitadas(asignadas);
-      // mismo código de marcadores
-      marcadores.forEach(m => mapa.removeLayer(m));
-      marcadores = [];
-      casasFiltradas.forEach(casa => {
-        const color = estadoColores[casa.estado] || 'gray';
-        const marker = L.circleMarker([casa.latitud, casa.longitud], {
-          radius: 8,
-          color: 'blue',
-          fillColor: color,
-          fillOpacity: 0.8,
-          weight: 2,
-          casaId: casa.id
-        }).addTo(mapa);
-        marker.on('click', () => {
-          idSeleccionado = casa.id;
-          document.getElementById('comentario').value = casa.comentario || '';
-          new bootstrap.Modal(document.getElementById('estadoModal')).show();
+          marcadores.push(marker);
         });
-        marcadores.push(marker);
-      });
-    }
-  }
-}
 
+        if (casasFiltradas.length === 0) {
+          detenerActualizacionAutomatica();
+          alert("No hay casas asignadas o visibles para este usuario.");
+        }
+
+      } catch (error) {
+        alert('Error al cargar casas');
+        console.error(error);
+      }
+    }
 
     document.querySelectorAll('#botonesEstado button').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const estado = btn.getAttribute('data-estado');
-    const comentario = document.getElementById('comentario').value;
-
-    const cambio = { id: idSeleccionado, estado, comentario };
-
-    if (navigator.onLine) {
-      // Si hay conexión, enviamos al servidor
-      fetch('/actualizar', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(cambio)
-      }).then(res => {
-        if (res.ok) {
-          bootstrap.Modal.getInstance(document.getElementById('estadoModal')).hide();
-          cargarCasas(usuarioActual);
-        } else alert('Error al actualizar');
+      btn.addEventListener('click', () => {
+        const estado = btn.getAttribute('data-estado');
+        const comentario = document.getElementById('comentario').value;
+        fetch('/actualizar', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: idSeleccionado, estado, comentario })
+        }).then(res => {
+          if (res.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('estadoModal')).hide();
+            cargarCasas(usuarioActual);
+          } else {
+            alert('Error al actualizar');
+          }
+        });
       });
-    } else {
-      // Si estamos offline, guardamos el cambio en localStorage
-      let pendientes = JSON.parse(localStorage.getItem('cambiosPendientes')) || [];
-      pendientes.push(cambio);
-      localStorage.setItem('cambiosPendientes', JSON.stringify(pendientes));
-
-      // Actualizamos también localmente la casa en "casas"
-      let casas = JSON.parse(localStorage.getItem('casas')) || [];
-      const idx = casas.findIndex(c => c.id === idSeleccionado);
-      if (idx !== -1) {
-        casas[idx].estado = estado;
-        casas[idx].comentario = comentario;
-        localStorage.setItem('casas', JSON.stringify(casas));
-      }
-
-      bootstrap.Modal.getInstance(document.getElementById('estadoModal')).hide();
-      cargarCasas(usuarioActual); // recargamos el mapa localmente
-    }
-  });
-});
-
-window.addEventListener('online', () => {
-  let pendientes = JSON.parse(localStorage.getItem('cambiosPendientes')) || [];
-  pendientes.forEach(cambio => {
-    fetch('/actualizar', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(cambio)
-    }).then(res => {
-      if (res.ok) {
-        // eliminamos del array de pendientes
-        let actuales = JSON.parse(localStorage.getItem('cambiosPendientes')) || [];
-        actuales = actuales.filter(p => p.id !== cambio.id);
-        localStorage.setItem('cambiosPendientes', JSON.stringify(actuales));
-        cargarCasas(usuarioActual); // refrescamos el mapa
-      }
     });
-  });
-});
-
 
     function iniciarActualizacionAutomatica() {
       if (intervaloActualizacion) clearInterval(intervaloActualizacion);
