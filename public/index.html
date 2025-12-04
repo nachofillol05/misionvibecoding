@@ -197,9 +197,8 @@ if (navigator.geolocation) {
 
     async function cargarCasas(usuario) {
       try {
-        const res = await fetch('/casas');
+        const res = await fetch(`/casas?usuario=${usuario}`);
         const todas = await res.json();
-
         const asignadas = todas.filter(c => c.asignado_a && c.asignado_a.toLowerCase() === usuario.toLowerCase());
         const casasFiltradas = filtrarVisitadas(asignadas);
 
