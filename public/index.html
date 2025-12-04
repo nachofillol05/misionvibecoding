@@ -302,6 +302,7 @@ window.addEventListener('online', () => {
         actuales = actuales.filter(p => p.id !== cambio.id);
         localStorage.setItem('cambiosPendientes', JSON.stringify(actuales));
         cargarCasas(usuarioActual); // refrescamos el mapa
+        alert('Cambios offline sincronizados');
       }
     });
   });
@@ -321,6 +322,15 @@ window.addEventListener('online', () => {
         intervaloActualizacion = null;
       }
     }
+
+
+    //borrar si no anda la descarga offline
+    if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js')
+    .then(() => console.log('Service Worker registrado'))
+    .catch(err => console.error('Error registrando Service Worker', err));
+}
+
 
 
   </script>
