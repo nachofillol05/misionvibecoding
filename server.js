@@ -25,19 +25,30 @@ app.get('/casas', async (req, res) => {
 
 // Endpoint para asignar casas
 app.post('/asignar', async (req, res) => {
-  const { usuario, ids } = req.body;
-  if (!usuario || !ids || !Array.isArray(ids)) {
-    return res.status(400).send('Faltan datos');
+  const { usuario, ids, fecha } = req.body;
+
+  // Validaciones
+  if (!usuario || !ids || !Array.isArray(ids) || !fecha) {
+    return res.status(400).send('Faltan datos (usuario, ids o fecha)');
   }
+
   try {
-    const q = 'UPDATE casas SET asignado_a = $1 WHERE id = ANY($2::int[])';
-    await pool.query(q, [usuario, ids]);
+    const q = `
+      UPDATE casas 
+      SET asignado_a = $1, fecha_asignacion = $2
+      WHERE id = ANY($3::int[])
+    `;
+
+    await pool.query(q, [usuario, fecha, ids]);
+
     res.sendStatus(200);
+
   } catch (e) {
     console.error(e);
     res.status(500).send('Error al asignar casas');
   }
 });
+
 
 // Endpoint para desasignar casas (borra estado y comentario también)
 app.post('/desasignar', async (req, res) => {

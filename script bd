@@ -86,6 +86,9 @@ ALTER TABLE ONLY public.casas
     ADD CONSTRAINT casas_pkey PRIMARY KEY (id);
 
 
+ALTER TABLE public.casas
+ADD COLUMN fecha_asignacion timestamp;
+
 --
 -- Name: DEFAULT PRIVILEGES FOR SEQUENCES; Type: DEFAULT ACL; Schema: -; Owner: postgres
 --
