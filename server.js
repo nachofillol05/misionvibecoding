@@ -12,7 +12,7 @@ app.get('/casas', async (req, res) => {
   try {
     if (usuario) {
       const result = await pool.query(
-        'SELECT * FROM casas WHERE asignado_a = $1 AND fecha_asignacion::date = CURRENT_DATE',
+        `SELECT * FROM casas WHERE asignado_a = $1 AND fecha_asignacion::date = (CURRENT_DATE AT TIME ZONE 'America/Argentina/Buenos_Aires')`,
         [usuario]
       );
       return res.json(result.rows);
