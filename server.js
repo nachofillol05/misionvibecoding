@@ -13,16 +13,16 @@ app.get('/casas', async (req, res) => {
   try {
     if (usuario) {
       const result = await pool.query(
-        `
-        SELECT *
-        FROM casas
-        WHERE asignado_a = $1
-          AND fecha_asignacion IS NOT NULL
-          AND fecha_asignacion::date <= CURRENT_DATE
-        ORDER BY fecha_asignacion ASC
-        `,
-        [usuario]
-      );
+  `
+  SELECT *
+  FROM casas
+  WHERE asignado_a ILIKE $1
+    AND fecha_asignacion IS NOT NULL
+    AND fecha_asignacion::date <= CURRENT_DATE
+  ORDER BY fecha_asignacion ASC
+  `,
+  [usuario]
+);
       return res.json(result.rows);
     } else {
       const result = await pool.query('SELECT * FROM casas');
