@@ -5,10 +5,7 @@
   <title>Mapa de Casas</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
-
-  <!-- Bootstrap (solo para estilos básicos) -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
 
   <style>
@@ -35,144 +32,148 @@
 </head>
 <body>
 
-  <div id="map"></div>
+<div id="map"></div>
 
-  <!-- Leaflet JS -->
-  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-  <script>
-    /* ================== CONFIG ================== */
+<script>
+/* ================= CONFIG ================= */
 
-    const estadoColores = {
-      visitada: 'green',
-      no_atendieron: 'orange',
-      otro: 'gray'
-    };
+const estadoColores = {
+  visitada: 'green',
+  no_atendieron: 'orange',
+  otro: 'gray'
+};
 
-    const coloresUsuarios = {};
-    const coloresDisponibles = [
-      '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
-      '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe',
-      '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000'
-    ];
+const coloresUsuarios = {};
+const coloresDisponibles = [
+  '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231',
+  '#911eb4', '#46f0f0', '#f032e6', '#bcf60c', '#fabebe',
+  '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000'
+];
 
-    function getColorUsuario(usuario) {
-      if (!usuario) return 'black';
-      if (!coloresUsuarios[usuario]) {
-        coloresUsuarios[usuario] =
-          coloresDisponibles[
-            Object.keys(coloresUsuarios).length % coloresDisponibles.length
-          ];
-      }
-      return coloresUsuarios[usuario];
-    }
+function getColorUsuario(usuario) {
+  if (!usuario) return 'black';
+  if (!coloresUsuarios[usuario]) {
+    coloresUsuarios[usuario] =
+      coloresDisponibles[
+        Object.keys(coloresUsuarios).length % coloresDisponibles.length
+      ];
+  }
+  return coloresUsuarios[usuario];
+}
 
-    /* ================== MAPA ================== */
+function toLocalDate(fechaStr) {
+  if (!fechaStr) return '(sin fecha)';
+  const [y, m, d] = fechaStr.split('T')[0].split('-');
+  return `${d}/${m}/${y}`;
+}
 
-    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-      attribution: '© OpenStreetMap'
-    });
+/* ================= CAPAS ================= */
 
-    const satelite = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
-      maxZoom: 18,
-      subdomains: ['mt0','mt1','mt2','mt3'],
-      attribution: '© Google'
-    });
+const osm = L.tileLayer(
+  'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  { maxZoom: 18, attribution: '© OpenStreetMap' }
+);
 
-    const mapa = L.map('map', {
-      center: [-31.61803, -64.38955],
-      zoom: 15,
-      maxZoom: 18,
-      layers: [osm]
-    });
+const satelite = L.tileLayer(
+  'https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+  { maxZoom: 18, subdomains: ['mt0','mt1','mt2','mt3'], attribution: '© Google' }
+);
 
-    let capaSateliteActiva = false;
-    let marcadores = [];
-    let tooltips = [];
+/* ================= MAPA ================= */
 
-    /* ================== UTIL ================== */
+const mapa = L.map('map', {
+  center: [-31.61803, -64.38955],
+  zoom: 15,
+  layers: [osm]
+});
 
-    function toLocalDate(fechaStr) {
-      if (!fechaStr) return '(sin fecha)';
-      const [y, m, d] = fechaStr.split('T')[0].split('-');
-      return `${d}/${m}/${y}`;
-    }
+/* 🔥 CONTROL INTEGRADO MAPA / SATÉLITE */
+L.control.layers(
+  {
+    "Mapa": osm,
+    "Satélite": satelite
+  },
+  null,
+  { position: 'topright' }
+).addTo(mapa);
 
-    /* ================== CARGAR CASAS ================== */
+/* ================= DATOS ================= */
 
-    async function cargarCasas() {
-      try {
-        const res = await fetch('/casas');
-        const casas = await res.json();
+let marcadores = [];
+let tooltips = [];
 
-        marcadores.forEach(m => mapa.removeLayer(m));
-        tooltips.forEach(t => mapa.removeLayer(t));
-        marcadores = [];
-        tooltips = [];
+async function cargarCasas() {
+  try {
+    const res = await fetch('/casas');
+    const casas = await res.json();
 
-        const porUsuario = {};
+    marcadores.forEach(m => mapa.removeLayer(m));
+    tooltips.forEach(t => mapa.removeLayer(t));
+    marcadores = [];
+    tooltips = [];
 
-        casas.forEach(casa => {
-          const marker = L.circleMarker(
-            [casa.latitud, casa.longitud],
-            {
-              radius: 8,
-              color: getColorUsuario(casa.asignado_a),
-              fillColor: estadoColores[casa.estado] || 'gray',
-              fillOpacity: 0.8,
-              weight: casa.asignado_a ? 2 : 1
-            }
-          ).addTo(mapa);
+    const porUsuario = {};
 
-          marker.bindPopup(`
-            <b>${casa.direccion}</b><br>
-            Estado: ${casa.estado || '(sin estado)'}<br>
-            Asignado a: ${casa.asignado_a || 'nadie'}<br>
-            Día: ${toLocalDate(casa.fecha_asignacion)}<br>
-            <hr>
-            <b>Comentario:</b><br>
-            ${casa.comentario ? casa.comentario : '<i>Sin comentario</i>'}
-          `);
-
-          marker.on('click', () => marker.openPopup());
-
-          if (casa.asignado_a) {
-            if (!porUsuario[casa.asignado_a]) porUsuario[casa.asignado_a] = [];
-            porUsuario[casa.asignado_a].push([casa.latitud, casa.longitud]);
-          }
-
-          marcadores.push(marker);
-        });
-
-        // Tooltips por usuario
-        for (const [usuario, coords] of Object.entries(porUsuario)) {
-          const centro = coords
-            .reduce((acc, c) => [acc[0] + c[0], acc[1] + c[1]], [0, 0])
-            .map(x => x / coords.length);
-
-          const tooltip = L.tooltip({
-            permanent: true,
-            direction: 'top',
-            className: 'usuario-label'
-          })
-          .setLatLng(centro)
-          .setContent(usuario)
-          .addTo(mapa);
-
-          tooltips.push(tooltip);
+    casas.forEach(casa => {
+      const marker = L.circleMarker(
+        [casa.latitud, casa.longitud],
+        {
+          radius: 8,
+          color: getColorUsuario(casa.asignado_a),
+          fillColor: estadoColores[casa.estado] || 'gray',
+          fillOpacity: 0.8,
+          weight: casa.asignado_a ? 2 : 1
         }
+      ).addTo(mapa);
 
-      } catch (err) {
-        console.error('Error cargando casas:', err);
+      marker.bindPopup(`
+        <b>${casa.direccion}</b><br>
+        Estado: ${casa.estado || '(sin estado)'}<br>
+        Asignado a: ${casa.asignado_a || 'nadie'}<br>
+        Día: ${toLocalDate(casa.fecha_asignacion)}<br>
+        <hr>
+        <b>Comentario:</b><br>
+        ${casa.comentario ? casa.comentario : '<i>Sin comentario</i>'}
+      `);
+
+      if (casa.asignado_a) {
+        if (!porUsuario[casa.asignado_a]) porUsuario[casa.asignado_a] = [];
+        porUsuario[casa.asignado_a].push([casa.latitud, casa.longitud]);
       }
+
+      marcadores.push(marker);
+    });
+
+    /* Tooltips por usuario */
+    for (const [usuario, coords] of Object.entries(porUsuario)) {
+      const centro = coords
+        .reduce((acc, c) => [acc[0]+c[0], acc[1]+c[1]], [0,0])
+        .map(x => x / coords.length);
+
+      const tooltip = L.tooltip({
+        permanent: true,
+        direction: 'top',
+        className: 'usuario-label'
+      })
+      .setLatLng(centro)
+      .setContent(usuario)
+      .addTo(mapa);
+
+      tooltips.push(tooltip);
     }
 
-    /* ================== INIT ================== */
+  } catch (err) {
+    console.error('Error cargando casas:', err);
+  }
+}
 
-    cargarCasas();
-    setInterval(cargarCasas, 5000);
+/* ================= INIT ================= */
 
-  </script>
+cargarCasas();
+setInterval(cargarCasas, 5000);
+
+</script>
 </body>
 </html>
