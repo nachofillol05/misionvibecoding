@@ -4,4 +4,3 @@ backup: pg_dump postgresql://usuario:password@host:puerto/dbname -Fc -f backup.d
 crear postgresql://nuevo_usuario:nueva_pass@nuevo_host:nuevo_puerto/nuevo_dbname
 restaurar: pg_restore -d postgresql://nuevo_usuario:nueva_pass@nuevo_host:nuevo_puerto/nuevo_dbname backup.dump
 
-

@@ -1,0 +1,4 @@
+para correr en local 
+
+nacho@nacho:~/Documentos/misionvibecoding$ export DATABASE_URL="postgresql://nacho:Zjy8dszugkBxazT24e5R6maEAWuIrRCP@dpg-d4oct87gi27c738d9fdg-a.oregon-postgres.render.com/misiondb_cha8"
+node server.js
